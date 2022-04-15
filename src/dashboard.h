@@ -11,15 +11,19 @@
 #include "Vars.h"
 
 namespace dashboard {
+    bool initialized;
+    DebouncedButton log_btn;
+
     enum State {
         IDLE,
         LOGGING,
         ERROR_LOG_INIT,
     };
 
+    // Not realllyyyy an FSM, but we pretend it is :)
     void fsm(Vars *vars, ArduinoOutStream &debug) {
         static State state;
-
+        vars->request_flag_log_init = log_btn.isTriggered();
     }
 }
 #endif //ECVT_DAQ_V1_DASHBOARD_H

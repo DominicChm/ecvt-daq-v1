@@ -85,7 +85,9 @@ namespace logger {
                 }
 
             case LOGGING:
+                break;
             case ERROR_LOG_INIT:
+                if (vars->request_flag_clear_err) state = IDLE;
                 break;
 
         }
