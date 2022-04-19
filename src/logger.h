@@ -11,11 +11,15 @@
 #include <sdios.h>
 
 #include "Vars.h"
+#include "jled.h"
+#include "DebouncedButton.h"
 
 
 namespace logger {
     const uint64_t SPI_SPEED = SD_SCK_MHZ(4);
     const uint8_t PIN_CS = 5;
+    JLed daq_led(13);
+    DebouncedButton log_btn(22);
 
     SdFs sd;
     FsFile file;
@@ -73,21 +77,32 @@ namespace logger {
     void fsm(Vars *vars, ArduinoOutStream &debug) {
         static State state;
 
+        daq_led.Update();
         switch (state) {
             case IDLE:
-                if (vars->request_flag_log_init) {
-                    vars->request_flag_log_init = false;
+                if (log_btn.isTriggered()) {
                     if (init_sd(vars, debug)) {
+                        daq_led.On(1).Forever();
                         state = LOGGING;
                     } else {
+                        daq_led.Blink(100, 100).Forever();
                         state = ERROR_LOG_INIT;
                     }
                 }
+                break;
 
             case LOGGING:
+                if (log_btn.isTriggered()) {
+                    daq_led.Off(1).Forever();
+                    state = IDLE;
+                }
                 break;
+
             case ERROR_LOG_INIT:
-                if (vars->request_flag_clear_err) state = IDLE;
+                if (log_btn.isTriggered()) {
+                    daq_led.Off(1).Forever();
+                    state = IDLE;
+                }
                 break;
 
         }

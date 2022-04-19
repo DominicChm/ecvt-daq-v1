@@ -15,7 +15,7 @@ enum LogStatus {
 struct Vars {
     LogStatus log_status;
     bool request_flag_clear_err;
-    bool request_flag_log_init;
+    bool request_flag_log_toggle;
 
 };
 #endif //ECVT_DAQ_V1_VARS_H

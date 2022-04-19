@@ -2,7 +2,8 @@
 #include <sdios.h>
 
 #include "logger.h"
-#include "dashboard.h"
+
+#define PIN 13
 
 #define SD_CS 5
 
@@ -14,12 +15,21 @@ ArduinoOutStream cout(Serial);
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("Setup Finished!");
+    pinMode(PIN, OUTPUT);
+    //PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[13], PIN_FUNC_GPIO);
+
+    //Serial.println("Setup Finished!");
+
 }
 
 void loop() {
+    Vars vars;
     static Vars *vp = &vars;
 
-    dashboard::fsm(vp, cout);
-    logger::fsm(cp, cout);
+    logger::fsm(vp, cout);
+
+//    digitalWrite(PIN, HIGH);
+//    delay(500);
+//    digitalWrite(PIN, LOW);
+//    delay(500);
 }
