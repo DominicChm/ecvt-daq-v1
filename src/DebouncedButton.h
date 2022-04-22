@@ -9,8 +9,9 @@ private:
     uint32_t debounceMs;
     bool debounced{};
 public:
-    explicit DebouncedButton(uint8_t buttonPin, bool inverted = false, uint8_t pin_mode = INPUT_PULLUP,
-                    uint32_t debounceMs = 1000) {
+    explicit DebouncedButton(uint8_t buttonPin, uint32_t debounceMs = 1000,
+                             bool inverted = false,
+                             uint8_t pin_mode = INPUT_PULLUP) {
         this->buttonPin = buttonPin;
         this->pin_mode = pin_mode;
         this->debounceMs = debounceMs;
@@ -28,10 +29,13 @@ public:
 
 
     /*When polled, this function will return true once per button press cycle.*/
-    bool isTriggered() { //TODO - Consider using an interrupt? Would make the lib less portable...
-        debounced &= digitalRead(buttonPin) == triggeredOn; //Prevent multiple triggers without at least one state change.
+    bool
+    isTriggered() { //TODO - Consider using an interrupt? Would make the lib less portable...
+        debounced &= digitalRead(buttonPin) ==
+                     triggeredOn; //Prevent multiple triggers without at least one daq_state change.
 
-        if ((millis() > next_trigger) && (digitalRead(buttonPin) == triggeredOn) && !debounced) {
+        if ((millis() > next_trigger) &&
+            (digitalRead(buttonPin) == triggeredOn) && !debounced) {
             next_trigger = millis() + debounceMs;
             debounced = true;
             return true;
