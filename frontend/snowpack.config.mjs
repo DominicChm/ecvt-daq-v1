@@ -26,14 +26,14 @@ export default {
 
     },
     packageOptions: {
-        polyfillNode: true,
+        polyfillNode: false,
         sourceMap: false,
 
     },
     devOptions: {
     },
     buildOptions: {
-        out: "../data",
+        out: "../web-build",
         sourceMap: false,
     },
 };

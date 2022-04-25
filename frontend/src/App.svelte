@@ -1,26 +1,18 @@
 <script lang="ts">
-    import {
-        Collapse,
-        Navbar,
-        NavbarToggler,
-        NavbarBrand,
-        Nav,
-        NavItem,
-        NavLink,
-        Dropdown,
-        DropdownToggle,
-        DropdownMenu,
-        Spinner,
-        DropdownItem
-    } from 'sveltestrap';
-    import {connected, header} from "./stores";
-    import Realtime from "./Realtime.svelte";
+    import {Collapse, Nav, Navbar, NavbarBrand, NavbarToggler, NavItem, NavLink, Spinner} from 'sveltestrap';
+    import {connected} from "./stores";
+    import Dash from "./Dash.svelte";
     import Router from 'svelte-spa-router'
     import Runs from "./Runs.svelte";
+    import RawData from "./RawData.svelte";
+    import Stats from "./Stats.svelte";
 
+    const NAVBAR_COLOR = "light";
     const routes = {
-        '/': Realtime,
+        '/': Dash,
         '/runs': Runs,
+        '/raw': RawData,
+        '/stats': Stats,
     }
 
     let isOpen = false;
@@ -30,8 +22,8 @@
     }
 </script>
 
-<Navbar color="light" light expand="md">
-    <NavbarBrand href="#/">ECVT DAQ</NavbarBrand>
+<Navbar color={NAVBAR_COLOR} light expand="md">
+    <NavbarBrand color={NAVBAR_COLOR} href="#/">ECVT DAQ</NavbarBrand>
     {#if (!$connected)}
         <div style="position: absolute; left: auto; right: auto; width: 100%; text-align: center; color: #0b5ed7">
             <strong>Connecting...</strong>
@@ -47,6 +39,12 @@
             </NavItem>
             <NavItem>
                 <NavLink href="#/runs">Runs</NavLink>
+            </NavItem>
+            <NavItem>
+                <NavLink href="#/raw">Raw Data</NavLink>
+            </NavItem>
+            <NavItem>
+                <NavLink href="#/stats">Stats</NavLink>
             </NavItem>
 
             <!--            <Dropdown nav inNavbar>-->

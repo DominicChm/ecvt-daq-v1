@@ -1,4 +1,5 @@
 import {derived, readable, writable} from "svelte/store";
+import {noop, subscribe} from "svelte/internal";
 
 
 export const socket = readable<null | WebSocket>(null, (set) => {
@@ -30,7 +31,7 @@ export const socket = readable<null | WebSocket>(null, (set) => {
     }
 });
 
-
+/* Stores the last received JSON message */
 export const message = derived(socket, ($socket, set) => {
     if (!$socket) return;
 
@@ -50,15 +51,28 @@ export const message = derived(socket, ($socket, set) => {
     }
 }, null)
 
+/* Derives header data from message stream */
 export const header = derived(message, ($message: any, set) => {
     if ($message?.type !== "header") return;
-    set($message.header.trim().split(", "));
+    set($message.data.trim().split(", "));
 }, []);
 
-export const data = derived(message, ($message: any, set) => {
+/* Derives raw frame (CSV) data from message stream */
+export const raw_frame = derived(message, ($message: any, set) => {
     if ($message?.type !== "frame") return;
+    set($message.data);
     console.log("Frame!");
 
-}, null);
+}, "");
+
+/* Combines header and data streams to create data objects for rendering */
+export const frame = derived([raw_frame, header], ([$raw_frame, $header]) => {
+    const entries = $header.map((k, i) => [k, $raw_frame[i]]);
+    return Object.fromEntries(entries);
+}, {});
+// Make sure frames are always listening for data.
+subscribe(frame, noop);
 
 export const connected = derived(socket, ($socket) => !!$socket);
+
+
