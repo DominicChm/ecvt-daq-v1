@@ -14,7 +14,6 @@
 #include "SDManager.h"
 
 
-
 #define SSID "daqdrew 🥵🍆💦"
 
 #define DATA_SERIAL Serial2
@@ -47,7 +46,8 @@ bool init_sd();
 
 void finalize_write();
 
-void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data,
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
+               AwsEventType type, void *arg, uint8_t *data,
                size_t len);
 
 void fs_handler(AsyncWebServerRequest *req) {
@@ -63,6 +63,17 @@ void fs_handler(AsyncWebServerRequest *req) {
     }
 }
 
+[[noreturn]] void setup_fail() {
+    server.on("/*", [](AsyncWebServerRequest *req) {
+        req->send(500, "text/plain", "SD ERROR! (possibly - no SD inserted, "
+                                     "no web folder");
+    });
+    while (1) {
+        builtin_led.Update();
+        daq_led.Update();
+    }
+}
+
 void setup() {
     DATA_SERIAL.begin(DATA_BAUD);
     Serial.begin(115200);
@@ -71,21 +82,11 @@ void setup() {
     builtin_led.Blink(100, 100).Forever();
     daq_led.Blink(100, 100).Forever();
 
-    debug << "Initializing SD" << endl;
-    if (!init_sd()) {
-        debug << "SD INIT FAIL!" << endl;
-        while (true) {
-            builtin_led.Update();
-            daq_led.Update();
-        }
-    }
-
     debug << "Setting up server" << endl;
     socket.onEvent(onWsEvent);
     server.addHandler(&socket);
 
     server.on("/*", HTTP_GET, fs_handler);
-
 
 //    debug << "Starting MDNS" << endl;
 //    if (!MDNS.begin("ecvt")) {
@@ -105,6 +106,12 @@ void setup() {
     );
     WiFi.softAP(SSID);
     debug << "Local IP: " << WiFi.localIP() << endl;
+
+    debug << "Initializing SD" << endl;
+    if (!init_sd()) {
+        debug << "SD INIT FAIL!" << endl;
+        setup_fail();
+    }
 
     debug << "Starting server" << endl;
     server.begin();
@@ -167,7 +174,7 @@ Data *parse_data() {
             state = PAYLOAD_;
             dp = 0;
         case PAYLOAD_:
-            ((uint8_t *) &data)[dp] = b;
+            ((uint8_t * ) & data)[dp] = b;
             if (dp >= sizeof(Data) - 1) {
                 state = TRAILER;
             }
@@ -188,7 +195,8 @@ Data *parse_data() {
     return nullptr;
 }
 
-void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data,
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
+               AwsEventType type, void *arg, uint8_t *data,
                size_t len) {
     if (type == WS_EVT_CONNECT) {
         Serial.printf("ws[%s][%u] connect\n", server->url(), client->id());
@@ -197,9 +205,11 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     } else if (type == WS_EVT_DISCONNECT) {
         Serial.printf("ws[%s][%u] disconnect\n", server->url(), client->id());
     } else if (type == WS_EVT_ERROR) {
-        Serial.printf("ws[%s][%u] error(%u): %s\n", server->url(), client->id(), *((uint16_t *) arg), (char *) data);
+        Serial.printf("ws[%s][%u] error(%u): %s\n", server->url(), client->id(),
+                      *((uint16_t *) arg), (char *) data);
     } else if (type == WS_EVT_PONG) {
-        Serial.printf("ws[%s][%u] pong[%u]: %s\n", server->url(), client->id(), len, (len) ? (char *) data : "");
+        Serial.printf("ws[%s][%u] pong[%u]: %s\n", server->url(), client->id(),
+                      len, (len) ? (char *) data : "");
     } else if (type == WS_EVT_DATA) {
         Serial.println("DATA");
     }
@@ -237,7 +247,11 @@ void loop() {
                 //Buffer the new packet
                 debug << dat_ptr->time << endl;
                 size_t num_written = buffer_data(print_buf, dat_ptr);
-                sd_manager.write((uint8_t *) (print_buf), num_written);
+                <<<<<<< Updated upstream
+                sd_manager.write((uint8_t * )(print_buf), num_written);
+                =======
+                write_sd_buf((uint8_t * )(print_buf), num_written);
+                >>>>>>> Stashed changes
             }
             /* Write a block when the SD isn't busy */
 
