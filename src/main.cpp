@@ -17,7 +17,7 @@
 #define SSID "daqdrew 🥵🍆💦"
 
 #define DATA_SERIAL Serial2
-#define DATA_BAUD 115200
+#define DATA_BAUD 2000000
 #define DATA_MAGIC_START 0xAA
 
 /* Global Definitions */
@@ -34,17 +34,8 @@ AsyncWebSocket socket("/ws");
 /*SD Definitions*/
 SDManager<3> sd_manager(debug);
 
-/* Buffers data in a circular buffer to avoid data loss */
-static uint8_t sd_buf[512 * 5];
-static size_t sd_buf_head;
-static size_t sd_buf_tail;
-static uint8_t write_buf[512];
-
 /* Declariations */
 extern const char header[]; //Defined with the writing function below :)
-bool init_sd();
-
-void finalize_write();
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data,
@@ -108,7 +99,7 @@ void setup() {
     debug << "Local IP: " << WiFi.localIP() << endl;
 
     debug << "Initializing SD" << endl;
-    if (!init_sd()) {
+    if (!sd_manager.init()) {
         debug << "SD INIT FAIL!" << endl;
         setup_fail();
     }
@@ -132,11 +123,6 @@ enum class State {
     ERROR_LOG_INIT,
     RESET,
 };
-
-struct {
-    char filename[256];
-    State logger_state;
-} daq_state;
 
 Data *parse_data() {
     static Data data{};
@@ -174,7 +160,7 @@ Data *parse_data() {
             state = PAYLOAD_;
             dp = 0;
         case PAYLOAD_:
-            ((uint8_t * ) & data)[dp] = b;
+            ((uint8_t *) &data)[dp] = b;
             if (dp >= sizeof(Data) - 1) {
                 state = TRAILER;
             }
@@ -215,10 +201,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     }
 }
 
-size_t buffer_data(char *buf, Data *data) {
-    return sprintf(buf, "%d\n", data->time);
-}
-
+size_t write_csv_line(char *buf, Data *d);
 
 void loop() {
     static State state;
@@ -227,6 +210,7 @@ void loop() {
     Data *dat_ptr;
 
     daq_led.Update();
+    sd_manager.loop();
     //builtin_led.Update();
 
     switch (state) {
@@ -239,19 +223,26 @@ void loop() {
             break;
 
         case State::LOGGING:
-            if (log_btn.isTriggered()) {
-                finalize_write();
+            if (!sd_manager.is_logging()) {
+                if (!sd_manager.init_log()) {
+                    state = State::ERROR_LOG_INIT;
+                    break;
+                }
+                sd_manager.write((uint8_t *) &header, strlen(header));
+                sd_manager.write((uint8_t *) F("\n"), 1);
+
+                debug << header << "\t" << strlen(header) << endl;
+            }
+            if (log_btn.isTriggered() && !sd_manager.sd.isBusy()) {
+                sd_manager.close_log();
                 state = State::RESET;
             }
             if ((dat_ptr = parse_data()) != nullptr) {
                 //Buffer the new packet
                 debug << dat_ptr->time << endl;
-                size_t num_written = buffer_data(print_buf, dat_ptr);
-                <<<<<<< Updated upstream
-                sd_manager.write((uint8_t * )(print_buf), num_written);
-                =======
-                write_sd_buf((uint8_t * )(print_buf), num_written);
-                >>>>>>> Stashed changes
+                debug << sd_manager.sd_buf_head << "\t" << sd_manager.sd_buf_tail << endl;
+                size_t num_written = write_csv_line(print_buf, dat_ptr);
+                sd_manager.write((uint8_t *) (print_buf), num_written);
             }
             /* Write a block when the SD isn't busy */
 
@@ -273,11 +264,6 @@ void loop() {
     }
 }
 
-
-bool init_sd() {
-
-}
-
 /* UPDATE WHENEVER DATA DOES */
 const char header[] = "time, rwSpeed, "
                       "eState, eSpeed, ePID, eP, eI, eD, "
@@ -285,6 +271,15 @@ const char header[] = "time, rwSpeed, "
                       "sState, sEncoder, sLoadCell, sCurrent, sPID, "
                       "sEncoderPID, sLoadCellPID, sLoadCellP, sLoadCellI, sLoadCellD";
 
-void write_csv_line(char *buf, Data *d) {
-    sprintf(buf, "LELEL");
+size_t write_csv_line(char *buf, Data *d) {
+    sprintf(buf, "%u,%d,"
+                 "%d,%d,%d,%d,%d,%d,"
+                 "%d,%d,%d,%d,%d,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+            d->time, d->rwSpeed,
+            d->eState, d->eSpeed, d->ePID, d->eP, d->eI, d->eD,
+            d->pState, d->pEncoder, d->pLoadCell, d->pCurrent, d->pPID,
+            d->sState, d->sEncoder, d->sLoadCell, d->sCurrent, d->sPID, d->sEncoderPID, d->sLoadCellPID, d->sLoadCellP,
+            d->sLoadCellI, d->sLoadCellD);
+    return strlen(buf);
 }

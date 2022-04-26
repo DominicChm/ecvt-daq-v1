@@ -7,7 +7,7 @@
 #include "Arduino.h"
 
 #define SD_CS 5
-#define SPI_SPEED SD_SCK_MHZ(4)
+#define SPI_SPEED SD_SCK_MHZ(25)
 
 template<size_t num_sector_buffers>
 class SDManager {
@@ -15,18 +15,22 @@ public:
     SdFs sd;
     FsFile log_file;
     ArduinoOutStream debug;
+    bool logging = false;
 
     char filename[256];
     char filepath[256];
 
+    uint8_t sd_buf[512 * num_sector_buffers];
+    size_t sd_buf_head;
+    size_t sd_buf_tail;
+    uint8_t write_buf[512];
+
     explicit SDManager(ArduinoOutStream &debug) : debug(debug) {};
 
     void loop() {
-        if (!sd.isBusy()) {
+        if (!sd.isBusy() && num_unwritten() > 512) {
             size_t size_read = read_sd_buf(write_buf, sizeof(write_buf));
-            if (size_read > 0) {
-                log_file.write(write_buf, size_read);
-            }
+            log_file.write(write_buf, size_read);
         }
     }
 
@@ -34,16 +38,19 @@ public:
  * Writes data into the SD's circular buffer.
  */
     size_t write(uint8_t *buf, size_t size) {
-        size_t i = 0;
-        for (; i < size && (sd_buf_tail - sd_buf_head) % sizeof(sd_buf) != 1;
-               i++, ++sd_buf_head %= sizeof(sd_buf)) {
-            sd_buf[sd_buf_head] = buf[i];
+        for (size_t i = 0; i < size; ++i, ++sd_buf_head) {
+            sd_buf[sd_buf_head % sizeof(sd_buf)] = buf[i];
         }
-        return i;
+        if (sd_buf_head - sd_buf_tail >= sizeof(sd_buf)) sd_buf_tail = sd_buf_head - sizeof(sd_buf) + 1;
+        return size;
+    }
+
+    bool guard_sdop() {
+        return sd.begin(SD_CS, SPI_SPEED);
     }
 
     bool init() {
-        if (!sd.begin(SD_CS, SPI_SPEED)) {
+        if (!guard_sdop()) {
             PrintMessage::sd_init_failure(debug);
             return false;
         }
@@ -66,28 +73,30 @@ public:
         return true;
     }
 
+    bool close_log() {
+        if (!guard_sdop()) return false;
+        if (!is_logging()) return false;
 
-private:
-    static uint8_t sd_buf[512 * num_sector_buffers];
-    static size_t sd_buf_head;
-    static size_t sd_buf_tail;
-    static uint8_t write_buf[512];
-
-    /*
- * Reads data from the SD's circular buffer. Returns the number of bytes read.
- */
-    size_t read_sd_buf(uint8_t *buf, size_t size) {
-        size_t i = 0;
-        for (; i < size && sd_buf_head - sd_buf_tail > 0;
-               i++, ++sd_buf_tail %= sizeof(sd_buf)) {
-            buf[i] = sd_buf[sd_buf_tail];
+        while (num_unwritten() > 0) {
+            size_t size_read = read_sd_buf(write_buf, sizeof(write_buf));
+            log_file.write(write_buf, size_read);
         }
-        return i;
+
+        log_file.truncate();
+        log_file.sync();
+        log_file.close();
+
+        return true;
+    }
+
+    bool is_logging() {
+        return logging;
     }
 
     bool init_log() {
-        if (log_file.isOpen()) return false;
-
+        if (!guard_sdop()) return false;
+        if (is_logging()) return false;
+        logging = true;
         //Select next filename
         int file_idx = 0;
         do {
@@ -97,17 +106,29 @@ private:
 
         debug << "Writing data to " << filepath << endl;
 
-        log_file.open(filename, O_RDWR | O_CREAT);
-        return true;
+        sd_buf_tail = sd_buf_head;
+
+        log_file.open(filepath, O_RDWR | O_CREAT);
+        log_file.preAllocate(3000);
+        return log_file.isOpen();
     }
 
-    bool close_log() {
-        if (!log_file.isOpen()) return false;
+    size_t num_unwritten() {
+        return sd_buf_head - sd_buf_tail;
+    }
 
-        file.flush();
-        file.truncate();
-        file.sync();
-        file.close();
+
+private:
+
+    /*
+ * Reads data from the SD's circular buffer. Returns the number of bytes read.
+ */
+    size_t read_sd_buf(uint8_t *buf, size_t size) {
+        size_t i = 0;
+        for (; i < size && sd_buf_head - sd_buf_tail > 0; ++i, ++sd_buf_tail) {
+            buf[i] = sd_buf[sd_buf_tail % sizeof(sd_buf)];
+        }
+        return i;
     }
 };
 

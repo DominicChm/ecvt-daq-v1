@@ -14,9 +14,5 @@ namespace SocketAPI {
     void emitHeader(AsyncWebSocketClient *client, const char *header) {
         client->printf(R"({"type":"header", "data": "%s"})", header);
     }
-
-    void emitHeader(AsyncWebSocketClient *client, const char *header) {
-        client->printf(R"({"type":"header", "data": "%s"})", header);
-    }
 }
 #endif //ECVT_DAQ_V1_SOCKETAPI_H
