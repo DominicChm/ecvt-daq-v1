@@ -30,7 +30,10 @@ public:
     void loop() {
         if (!sd.isBusy() && num_unwritten() > 512) {
             size_t size_read = read_sd_buf(write_buf, sizeof(write_buf));
-            log_file.write(write_buf, size_read);
+            if (log_file.write(write_buf, size_read) != size_read) {
+                debug << "ERROR WRITING LOG" << endl;
+            }
+
         }
     }
 
@@ -49,6 +52,23 @@ public:
         return sd.begin(SD_CS, SPI_SPEED);
     }
 
+    void scan_runs() {
+        char filename[256];
+        FsFile runs = sd.open("runs.txt", O_RDWR | O_CREAT);
+        FsFile run_dir = sd.open("/runs/");
+        FsFile f;
+        while ((f = run_dir.openNextFile())) {
+            f.getName(filename, 256);
+            debug << filename << endl;
+            runs.print(filename);
+            runs.print(",");
+        }
+        runs.print('\0');
+        runs.close();
+        run_dir.close();
+        f.close();
+    }
+
     bool init() {
         if (!guard_sdop()) {
             PrintMessage::sd_init_failure(debug);
@@ -60,15 +80,10 @@ public:
             return false;
         }
 
-        // Check folders
-        if (!sd.exists("web")) {
-            PrintMessage::sd_web_folder(debug);
-            return false;
-        }
-
         if (!sd.exists("runs"))
             sd.mkdir("runs");
 
+        scan_runs();
         debug << F("Card initialized!") << endl;
         return true;
     }
@@ -109,6 +124,12 @@ public:
         sd_buf_tail = sd_buf_head;
 
         log_file.open(filepath, O_RDWR | O_CREAT);
+
+        memset(write_buf, 0, sizeof(write_buf));
+        if (log_file.write(write_buf, 512) != 512) {
+            debug << "write first sector failed" << endl;
+        }
+
         log_file.preAllocate(3000);
         return log_file.isOpen();
     }

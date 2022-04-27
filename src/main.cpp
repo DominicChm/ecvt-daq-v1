@@ -12,6 +12,7 @@
 //#include <ESPmDNS.h>
 #include <WiFi.h>
 #include "SDManager.h"
+#include <CircularBuffer.h>
 
 
 #define SSID "daqdrew 🥵🍆💦"
@@ -19,6 +20,14 @@
 #define DATA_SERIAL Serial2
 #define DATA_BAUD 2000000
 #define DATA_MAGIC_START 0xAA
+
+enum class HandlerT {
+    FILE,
+    RUN_LIST,
+};
+
+FsFile server_f;
+CircularBuffer<AsyncWebServerRequest *, 20> request_buffer;
 
 /* Global Definitions */
 ArduinoOutStream debug(Serial);
@@ -41,16 +50,23 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data,
                size_t len);
 
+
 void fs_handler(AsyncWebServerRequest *req) {
     char filepath[256];
     debug << req->url() << endl;
-    snprintf(filepath, 256, "/web%s", req->url().c_str());
-    if (sd_manager.sd.exists(filepath)) {
-        FsFile f = sd_manager.sd.open(filepath, O_RDONLY);
-        //Stream &stream, const String& contentType, size_t len, AwsTemplateProcessor callback
-        req->send((Stream &) f, "text/plain", f.size());
+
+    FsFile f;
+    if (strcmp(req->url().c_str(), "/") == 0) {
+        snprintf(filepath, 256, "/index.html");
     } else {
-        req->send(404, "text", "File not found :O\nBlame Andrew >:(");
+        strncpy(filepath, req->url().c_str(), 256);
+    }
+
+    if (sd_manager.sd.exists(filepath)) {
+        server_f.open(filepath);
+        req->send((Stream &) server_f, "text/html", server_f.size());
+    } else {
+        req->send(404, "text/html", "File not found :O\nBlame Andrew >:(");
     }
 }
 
@@ -65,6 +81,14 @@ void fs_handler(AsyncWebServerRequest *req) {
     }
 }
 
+void handle_requests() {
+    if (request_buffer.isEmpty()) return;
+    if (sd_manager.sd.isBusy()) return;
+
+    AsyncWebServerRequest *req = request_buffer.pop();
+    fs_handler(req);
+}
+
 void setup() {
     DATA_SERIAL.begin(DATA_BAUD);
     Serial.begin(115200);
@@ -77,7 +101,9 @@ void setup() {
     socket.onEvent(onWsEvent);
     server.addHandler(&socket);
 
-    server.on("/*", HTTP_GET, fs_handler);
+    server.on("/*", HTTP_GET, [](AsyncWebServerRequest *req) {
+        request_buffer.push(req);
+    });
 
 //    debug << "Starting MDNS" << endl;
 //    if (!MDNS.begin("ecvt")) {
@@ -184,6 +210,7 @@ Data *parse_data() {
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data,
                size_t len) {
+    client->
     if (type == WS_EVT_CONNECT) {
         Serial.printf("ws[%s][%u] connect\n", server->url(), client->id());
         SocketAPI::emitHeader(client, header);
@@ -210,6 +237,7 @@ void loop() {
     Data *dat_ptr;
 
     daq_led.Update();
+    handle_requests();
     sd_manager.loop();
     //builtin_led.Update();
 
@@ -228,6 +256,7 @@ void loop() {
                     state = State::ERROR_LOG_INIT;
                     break;
                 }
+                while (DATA_SERIAL.available()) { DATA_SERIAL.read(); } // Clear buffered data!
                 sd_manager.write((uint8_t *) &header, strlen(header));
                 sd_manager.write((uint8_t *) F("\n"), 1);
 
@@ -244,8 +273,6 @@ void loop() {
                 size_t num_written = write_csv_line(print_buf, dat_ptr);
                 sd_manager.write((uint8_t *) (print_buf), num_written);
             }
-            /* Write a block when the SD isn't busy */
-
             break;
 
         case State::ERROR_LOG_INIT:
@@ -257,8 +284,8 @@ void loop() {
             debug << "Logger reset!" << endl;
 
             daq_led.Off(1).Forever();
+            sd_manager.scan_runs();
             state = State::IDLE;
-
             break;
 
     }
