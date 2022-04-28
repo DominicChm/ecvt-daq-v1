@@ -27,7 +27,7 @@ export default {
     },
     packageOptions: {
         polyfillNode: false,
-        sourceMap: false,
+        //sourceMap: false,
 
     },
     devOptions: {
