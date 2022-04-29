@@ -7,16 +7,18 @@
 #include "Arduino.h"
 #include <SD.h>
 #include "PrintMessage.h"
+#include "util.h"
+
+#define RUNS_DIR "/r"
+
 #define SD_CS 5
 
-template<size_t num_sector_buffers>
 class SDManager {
 public:
     fs::File log_file;
     ArduinoOutStream debug;
     bool logging = false;
 
-    char filename[256];
     char filepath[256];
 
     uint8_t sd_buf[1024 * 32];
@@ -32,7 +34,6 @@ public:
             if (log_file.write(write_buf, size_read) != size_read) {
                 debug << "ERROR WRITING LOG" << endl;
             }
-
         }
     }
 
@@ -49,34 +50,48 @@ public:
 
 
     void scan_runs() {
-        fs::File runs_html = SD.open("/r.html", FILE_WRITE);
-        runs_html.print("<!doctype html>\n"
-                        "<html lang=\"en\">\n"
-                        "<head>\n"
-                        "<title>Runs</title>\n"
-                        "</head>\n"
-                        "<body>\n");
+        char meta_base[256];
+        char meta_path[256];
+        uint8_t buf[256];
 
-        fs::File run_dir = SD.open("/r");
-        fs::File f;
-        while ((f = run_dir.openNextFile())) {
-            debug << f.name() << endl;
-            runs_html.printf("<p><a download href=\"/r/%s\">%s</a></p>", f.name(), f.name());
-            f.close();
+        fs::File runs = SD.open("/r.txt", FILE_WRITE);
+        fs::File run_dir = SD.open(RUNS_DIR);
+        fs::File file;
+
+        while ((file = run_dir.openNextFile())) {
+            if (get_ext(file.name()) == Ext::CSV) {
+                debug << file.name() << endl;
+                runs.printf("%s`", file.name());
+                get_base(meta_base, file.name(), 256);
+                file.close();
+
+                snprintf(meta_path, 256, RUNS_DIR"/%s.met", meta_base);
+
+                file = SD.open(meta_path);
+
+                // Copy the contents of META into r. Should be same format (ie '`' delimited)
+                while (file.available() > 0) {
+                    size_t size = min(256, file.available());
+                    file.read(buf, size);
+                    runs.write(buf, size);
+                }
+
+                file.close();
+                runs.printf("\n");
+            }
         }
         run_dir.close();
-
-        runs_html.print("</body>");
-        runs_html.close();
+        runs.flush();
+        runs.close();
     }
 
     bool init() {
-        if(!SD.begin(SD_CS, SPI, 40000000))
+        if (!SD.begin(SD_CS, SPI, 40000000))
             return false;
 
         delay(200);
-        if (!SD.exists("/r"))
-            SD.mkdir("/r");
+        if (!SD.exists(RUNS_DIR))
+            SD.mkdir(RUNS_DIR);
 
         scan_runs();
         debug << F("Card initialized!") << endl;
@@ -92,7 +107,7 @@ public:
         }
 
         log_file.close();
-
+        logging = false;
         return true;
     }
 
@@ -103,16 +118,24 @@ public:
     bool init_log() {
         if (is_logging()) return false;
         logging = true;
+        char metafile_path[256];
+
         //Select next filename
         int file_idx = 0;
         do {
-            snprintf(filename, 256, "%d.csv", file_idx++);
-            snprintf(filepath, 256, "/r/%s", filename);
+            snprintf(metafile_path, 256, RUNS_DIR"/%d.met", file_idx);
+            snprintf(filepath, 256, RUNS_DIR"/%d.csv", file_idx++);
         } while (SD.exists(filepath));
 
+
         debug << "Writing data to " << filepath << endl;
+        debug << "Writing META to " << metafile_path << endl;
 
         sd_buf_tail = sd_buf_head;
+
+        File f = SD.open(metafile_path, "w");
+        f.printf("Run #%d`No description", file_idx);
+        f.close();
 
         return log_file = SD.open(filepath, "w");
     }

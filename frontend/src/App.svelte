@@ -2,17 +2,19 @@
     import {Collapse, Nav, Navbar, NavbarBrand, NavbarToggler, NavItem, NavLink, Spinner} from 'sveltestrap';
     import {connected} from "./stores";
     import Dash from "./Dash.svelte";
-    import Router from 'svelte-spa-router'
+    import Router, {replace} from 'svelte-spa-router'
     import Runs from "./Runs.svelte";
     import RawData from "./RawData.svelte";
     import Stats from "./Stats.svelte";
+    import {onMount} from "svelte";
 
     const NAVBAR_COLOR = "light";
+    onMount(() => {replace("/runs")})
     const routes = {
-        '/': Dash,
+        // '/': Dash,
         '/runs': Runs,
         '/raw': RawData,
-        '/stats': Stats,
+        // '/stats': Stats,
     }
 
     let isOpen = false;
@@ -34,28 +36,19 @@
     <NavbarToggler on:click={() => (isOpen = !isOpen)}/>
     <Collapse {isOpen} navbar expand="md" on:update={handleUpdate}>
         <Nav class="ms-auto" navbar>
-            <NavItem>
-                <NavLink href="#/">Home</NavLink>
-            </NavItem>
+<!--            <NavItem>-->
+<!--                <NavLink href="#/">Home</NavLink>-->
+<!--            </NavItem>-->
             <NavItem>
                 <NavLink href="#/runs">Runs</NavLink>
             </NavItem>
             <NavItem>
                 <NavLink href="#/raw">Raw Data</NavLink>
             </NavItem>
-            <NavItem>
-                <NavLink href="#/stats">Stats</NavLink>
-            </NavItem>
+<!--            <NavItem>-->
+<!--                <NavLink href="#/stats">Stats</NavLink>-->
+<!--            </NavItem>-->
 
-            <!--            <Dropdown nav inNavbar>-->
-            <!--                <DropdownToggle nav caret>Options</DropdownToggle>-->
-            <!--                <DropdownMenu end>-->
-            <!--                    <DropdownItem>Option 1</DropdownItem>-->
-            <!--                    <DropdownItem>Option 2</DropdownItem>-->
-            <!--                    <DropdownItem divider/>-->
-            <!--                    <DropdownItem>Reset</DropdownItem>-->
-            <!--                </DropdownMenu>-->
-            <!--            </Dropdown>-->
         </Nav>
     </Collapse>
 </Navbar>

@@ -5,12 +5,15 @@
   "main": "index.js",
   "scripts": {
     "dev": "snowpack dev",
-    "build": "snowpack build --mode production"
+    "build": "snowpack build --mode production && gzipper c -i js,css,html build build && del-cli \"build/*.js\" \"build/*.map\" \"build/*.css\""
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "c-type-util": "^3.0.1",
+    "del-cli": "^4.0.1",
+    "gzipper": "^7.1.0",
+    "http2-proxy": "^5.0.53",
     "papaparse": "^5.3.1",
     "svelte": "^3.47.0",
     "svelte-spa-router": "^3.2.0",

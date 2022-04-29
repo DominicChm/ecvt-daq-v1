@@ -1,8 +1,15 @@
-<script>
+<script lang="ts">
     import {frame, header, runs} from "./stores";
-    import {Button, Column, Table} from "sveltestrap";
+    import {Button, Column, Container, Table} from "sveltestrap";
+    import RunEditModal from "./RunEditModal.svelte";
 
+    let editOpen = false;
 
+    let editingRun;
+    function editRun(run) {
+        editingRun = run;
+        editOpen = true;
+    }
 </script>
 <style>
     .column-float {
@@ -12,15 +19,24 @@
 <div>
     {#if ($runs)}
         <Table rows={$runs} let:row striped>
-            <Column header="Run File" width="1fr">
-                {row}
+            <Column header="Name" width="1fr">
+                {row.name}
             </Column>
-            <Column header="" width="0" >
-                <Button download={"pee"}
-                        href={`http://localhost:3000/runs/${row}`}>Download
-                </Button>
+            <Column header="Desc" width="auto">
+                {row.description}
+            </Column>
+            <Column header="Filename" width="1fr">
+                {row.filename}
+            </Column>
+            <Column header="" width="0">
+                <div style="display: flex; gap: .5rem">
+                    <Button download={row.name} href={`/r/${row.filename}`}>Download</Button>
+                    <Button on:click={() => editRun(row)}>Edit</Button>
+                </div>
             </Column>
         </Table>
     {/if}
 
 </div>
+
+<RunEditModal bind:isOpen={editOpen} run={editingRun}/>

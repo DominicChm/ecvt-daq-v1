@@ -14,6 +14,7 @@ namespace SocketAPI {
     }
 
     void emitRunEvent(AsyncWebSocketClient *client, const char *event_name) {
+
         client->printf(R"({"type":"event", "data": "%s"})", event_name);
     }
 }
