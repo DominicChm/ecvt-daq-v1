@@ -3,12 +3,10 @@
 #include <sdios.h>
 #include <SPI.h>
 
-#include <SdFat.h>
+#include <SD.h>
 #include "jled.h"
 #include "DebouncedButton.h"
 #include "Communications.h"
-#include "PrintMessage.h"
-#include <ArduinoJson.h>
 #include "ESPAsyncWebServer.h"
 //#include <ESPmDNS.h>
 #include <WiFi.h>
@@ -21,6 +19,8 @@
 #define DATA_SERIAL Serial2
 #define DATA_BAUD 2000000
 #define DATA_MAGIC_START 0xAA
+
+size_t orate = 0;
 
 enum class HandlerT {
     FILE,
@@ -51,55 +51,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                size_t len);
 
 
-void fs_handler(AsyncWebServerRequest *req) {
-    FsFile f;
-
-    is_responding = true;
-    char filepath[256];
-    debug << req->url() << endl;
-
-    if (strcmp(req->url().c_str(), "/") == 0) {
-        snprintf(filepath, 256, "/index.html");
-    } else {
-        strncpy(filepath, req->url().c_str(), 256);
-    }
-
-    if (sd_manager.sd.exists(filepath)) {
-        f.open(filepath, O_READ);
-        AsyncWebServerResponse *response = req->beginResponse(
-                "",
-                f.size(),
-                [f](uint8_t *buffer, size_t maxLen, size_t total) mutable -> size_t {
-                    if (sd_manager.sd.isBusy()) return 0;
-                    int bytes;
-
-                    if ((bytes = f.read(buffer, min((unsigned long) maxLen, 1024ul))) < 0) {
-                        f.seek(total);
-                        return 0;
-                    }
-
-                    if (bytes < 0) {
-                        Serial.println(sd_manager.sd.card()->errorCode(), HEX);
-
-                        return 0;
-                    }
-                    // close file at the end
-                    if (bytes + total >= f.size()) {
-                        f.close();
-                        is_responding = false;
-                    }
-                    debug << bytes << "\t" << total << "\t" << f.size() << "\t" << bytes + total << endl;
-                    return max(0, bytes); // return 0 even when no bytes were loaded
-                }
-        );
-        //    void send(FS &fs, const String& path, const String& contentType=String(), bool download=false, AwsTemplateProcessor callback=nullptr);
-        req->send(response);
-        //req->send((Stream &) server_f, "text/html", server_f.size());
-    } else {
-        req->send(404, "text/html", "File not found :O\nBlame Andrew >:(");
-    }
-}
-
 [[noreturn]] void setup_fail() {
     server.on("/*", [](AsyncWebServerRequest *req) {
         req->send(500, "text/plain", "SD ERROR! (possibly - no SD inserted, "
@@ -111,32 +62,18 @@ void fs_handler(AsyncWebServerRequest *req) {
     }
 }
 
-void handle_requests() {
-    if (request_buffer.isEmpty()) return;
-    if (sd_manager.sd.isBusy()) return;
-    //if (is_responding) return;
-
-    is_responding = true;
-
-    AsyncWebServerRequest *req = request_buffer.pop();
-    fs_handler(req);
-}
-
 void setup() {
     DATA_SERIAL.begin(DATA_BAUD);
+    DATA_SERIAL.setRxBufferSize(1024);
     Serial.begin(115200);
-
+    debug << "CPU Clock: " << getCpuFrequencyMhz() << endl;
     // Set LED into a default failure state to easily fail.
     builtin_led.Blink(100, 100).Forever();
     daq_led.Blink(100, 100).Forever();
 
     debug << "Setting up server" << endl;
-    socket.onEvent(onWsEvent);
-    server.addHandler(&socket);
-    //server.serveStatic("/", sd_manager.sd, "/");
-    server.on("/*", HTTP_GET, [](AsyncWebServerRequest *req) {
-        request_buffer.push(req);
-    });
+    //socket.onEvent(onWsEvent);
+    //server.addHandler(&socket);
 
 //    debug << "Starting MDNS" << endl;
 //    if (!MDNS.begin("ecvt")) {
@@ -164,6 +101,11 @@ void setup() {
     }
 
     debug << "Starting server" << endl;
+    server.serveStatic("/", SD, "/").setDefaultFile("r.html");
+//    server.on("/*", [](AsyncWebServerRequest *req) {
+//        req->send(404, "text/html", "Error 404 DaqDrew not found :o");
+//    });
+
     server.begin();
 
     // Blink a success message :)
@@ -199,6 +141,7 @@ Data *parse_data() {
         TRAILER_,
     } state;
 
+    if (DATA_SERIAL.available() > 1000) debug << "WEEWOO" << endl;
     if (!DATA_SERIAL.available()) return nullptr;
     uint8_t b = DATA_SERIAL.read();
     //debug << "DAT" << endl;
@@ -270,7 +213,6 @@ void loop() {
     Data *dat_ptr;
 
     daq_led.Update();
-    handle_requests();
     sd_manager.loop();
     //builtin_led.Update();
 
@@ -295,14 +237,14 @@ void loop() {
 
                 debug << header << "\t" << strlen(header) << endl;
             }
-            if (log_btn.isTriggered() && !sd_manager.sd.isBusy()) {
+            if (log_btn.isTriggered()) {
                 sd_manager.close_log();
                 state = State::RESET;
             }
             if ((dat_ptr = parse_data()) != nullptr) {
                 //Buffer the new packet
-                debug << dat_ptr->time << endl;
-                debug << sd_manager.sd_buf_head << "\t" << sd_manager.sd_buf_tail << endl;
+                //debug << dat_ptr->time << endl;
+                //debug << sd_manager.sd_buf_head << "\t" << sd_manager.sd_buf_tail << endl;
                 size_t num_written = write_csv_line(print_buf, dat_ptr);
                 sd_manager.write((uint8_t *) (print_buf), num_written);
             }
