@@ -21,7 +21,7 @@ export default {
     optimize: {
         bundle: true,
         minify: true,
-        target: 'es2018',
+        target: 'esnext',
         sourceMap: false,
 
     },
@@ -33,7 +33,7 @@ export default {
     devOptions: {
     },
     buildOptions: {
-        out: "../web-build",
+        out: "build",
         sourceMap: false,
     },
 };

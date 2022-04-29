@@ -1,35 +1,51 @@
-import {derived, readable, writable} from "svelte/store";
+import {derived, readable} from "svelte/store";
 import {noop, subscribe} from "svelte/internal";
+import.meta.hot;
 
+//@ts-ignore
+console.log( __SNOWPACK_ENV__.MODE);
+
+//@ts-ignore
+const API_PORT = __SNOWPACK_ENV__.MODE === "production" ? 80 : 3000
 
 export const socket = readable<null | WebSocket>(null, (set) => {
     let ws: WebSocket;
-    let tout: number;
+    let destroyed = false;
+
+    function onOpen() {
+        set(ws)
+    }
+
+    function onClose() {
+        console.log("Socket closed - Attempting reconnection...");
+        ws.removeEventListener("open", onOpen);
+        ws.removeEventListener("close", onClose)
+        ws.removeEventListener("error", onError);
+        set(null);
+
+        if (!destroyed) setTimeout(connect, 500);
+    }
+
+    function onError(err: any) {
+        console.error('Socket encountered error: ', err, 'Closing socket');
+        ws.close();
+    }
 
     function connect() {
-        ws = new WebSocket(`ws://${window.location.hostname}:3000/ws`);
+        ws = new WebSocket(`ws://${window.location.hostname}:${API_PORT}/ws`);
         //ws = new WebSocket(`ws://192.168.1.2:80/ws`);
 
-        ws.onopen = () => set(ws);
-        ws.onclose = function (e) {
-            //console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
-            set(null);
-            tout = setTimeout(connect, 500);
-        };
-
-        ws.onerror = function (err) {
-            console.error('Socket encountered error: ', err, 'Closing socket');
-            ws.close();
-        };
+        ws.addEventListener("open", onOpen);
+        ws.addEventListener("close", onClose)
+        ws.addEventListener("error", onError);
     }
 
     connect();
 
     return () => {
+        console.log("Closing WS (in theory)");
+        destroyed = true;
         ws.close();
-        ws.onclose = null;
-        ws.onerror = null;
-        clearTimeout(tout);
     }
 });
 
@@ -73,13 +89,19 @@ export const frame = derived([raw_frame, header], ([$raw_frame, $header]) => {
 
 export const connected = derived(socket, ($socket) => !!$socket);
 
-export const runs = derived([connected], (async ([$connected]: any[], set: any) => {
-    console.log("RUNS")
+/**
+ * Store that contains an array of available run names.
+ */
+export const runs = derived([connected, message], (async ([$connected, $message]: any[], set: any) => {
     if (!$connected) return;
-    let res = await fetch("http://localhost:3000/runs.txt");
+    if (!$message || $message.type !== "event" || $message.data !== "runs") return;
+    console.log("RUNS")
+
+    let res = await fetch(`http://${window.location.host}:3000/runs.txt`, {});
     const run_arr = (await res.text()).split(",")
         .map(v => v.trim())
         .filter(v => v);
+
     console.log(run_arr);
     set(run_arr);
 }) as any);

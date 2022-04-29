@@ -27,6 +27,11 @@ wss.on('connection', function connection(ws) {
         data: 'Test, test2, test3, test4'
     }));
 
+    ws.send(JSON.stringify({
+        type: "event",
+        data: 'runs'
+    }));
+
     let ctr = 0;
     setInterval(() => {
         ws.send(JSON.stringify({

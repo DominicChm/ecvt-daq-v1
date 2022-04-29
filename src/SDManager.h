@@ -55,18 +55,36 @@ public:
     void scan_runs() {
         char filename[256];
         FsFile runs = sd.open("runs.txt", O_RDWR | O_CREAT);
+        FsFile runs_html = sd.open("r", O_RDWR | O_CREAT);
+        runs_html.print("<!doctype html>\n"
+                        "<html lang=\"en\">\n"
+                        "<head>\n"
+                        "<title>Runs</title>\n"
+                        "</head>\n"
+                        "<body>\n");
+
         FsFile run_dir = sd.open("/runs/");
         FsFile f;
         while ((f = run_dir.openNextFile())) {
             f.getName(filename, 256);
+            f.close();
             debug << filename << endl;
             runs.print(filename);
             runs.print(",");
+            runs_html.printf("<p><a download href=\"/runs/%s\">%s</a></p>", filename, filename);
         }
-        runs.print('\0');
+        runs_html.print("</body>");
+
+        runs_html.sync();
+        runs_html.truncate();
+        runs_html.close();
+
+        runs.sync();
+        runs.truncate();
         runs.close();
+
         run_dir.close();
-        f.close();
+
     }
 
     bool init() {

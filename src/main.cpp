@@ -2,13 +2,14 @@
 #include "SocketAPI.h"
 #include <sdios.h>
 #include <SPI.h>
+
 #include <SdFat.h>
 #include "jled.h"
 #include "DebouncedButton.h"
 #include "Communications.h"
 #include "PrintMessage.h"
 #include <ArduinoJson.h>
-#include <ESPAsyncWebServer.h>
+#include "ESPAsyncWebServer.h"
 //#include <ESPmDNS.h>
 #include <WiFi.h>
 #include "SDManager.h"
@@ -26,7 +27,6 @@ enum class HandlerT {
     RUN_LIST,
 };
 
-FsFile server_f;
 CircularBuffer<AsyncWebServerRequest *, 20> request_buffer;
 
 /* Global Definitions */
@@ -42,7 +42,7 @@ AsyncWebSocket socket("/ws");
 
 /*SD Definitions*/
 SDManager<3> sd_manager(debug);
-
+volatile size_t is_responding = false;
 /* Declariations */
 extern const char header[]; //Defined with the writing function below :)
 
@@ -52,10 +52,12 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
 
 void fs_handler(AsyncWebServerRequest *req) {
+    FsFile f;
+
+    is_responding = true;
     char filepath[256];
     debug << req->url() << endl;
 
-    FsFile f;
     if (strcmp(req->url().c_str(), "/") == 0) {
         snprintf(filepath, 256, "/index.html");
     } else {
@@ -63,8 +65,36 @@ void fs_handler(AsyncWebServerRequest *req) {
     }
 
     if (sd_manager.sd.exists(filepath)) {
-        server_f.open(filepath);
-        req->send((Stream &) server_f, "text/html", server_f.size());
+        f.open(filepath, O_READ);
+        AsyncWebServerResponse *response = req->beginResponse(
+                "",
+                f.size(),
+                [f](uint8_t *buffer, size_t maxLen, size_t total) mutable -> size_t {
+                    if (sd_manager.sd.isBusy()) return 0;
+                    int bytes;
+
+                    if ((bytes = f.read(buffer, min((unsigned long) maxLen, 1024ul))) < 0) {
+                        f.seek(total);
+                        return 0;
+                    }
+
+                    if (bytes < 0) {
+                        Serial.println(sd_manager.sd.card()->errorCode(), HEX);
+
+                        return 0;
+                    }
+                    // close file at the end
+                    if (bytes + total >= f.size()) {
+                        f.close();
+                        is_responding = false;
+                    }
+                    debug << bytes << "\t" << total << "\t" << f.size() << "\t" << bytes + total << endl;
+                    return max(0, bytes); // return 0 even when no bytes were loaded
+                }
+        );
+        //    void send(FS &fs, const String& path, const String& contentType=String(), bool download=false, AwsTemplateProcessor callback=nullptr);
+        req->send(response);
+        //req->send((Stream &) server_f, "text/html", server_f.size());
     } else {
         req->send(404, "text/html", "File not found :O\nBlame Andrew >:(");
     }
@@ -84,6 +114,9 @@ void fs_handler(AsyncWebServerRequest *req) {
 void handle_requests() {
     if (request_buffer.isEmpty()) return;
     if (sd_manager.sd.isBusy()) return;
+    //if (is_responding) return;
+
+    is_responding = true;
 
     AsyncWebServerRequest *req = request_buffer.pop();
     fs_handler(req);
@@ -100,7 +133,7 @@ void setup() {
     debug << "Setting up server" << endl;
     socket.onEvent(onWsEvent);
     server.addHandler(&socket);
-
+    //server.serveStatic("/", sd_manager.sd, "/");
     server.on("/*", HTTP_GET, [](AsyncWebServerRequest *req) {
         request_buffer.push(req);
     });
@@ -210,10 +243,10 @@ Data *parse_data() {
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data,
                size_t len) {
-    client->
     if (type == WS_EVT_CONNECT) {
         Serial.printf("ws[%s][%u] connect\n", server->url(), client->id());
         SocketAPI::emitHeader(client, header);
+        SocketAPI::emitRunEvent(client, "runs");
         client->ping();
     } else if (type == WS_EVT_DISCONNECT) {
         Serial.printf("ws[%s][%u] disconnect\n", server->url(), client->id());
