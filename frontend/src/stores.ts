@@ -79,6 +79,11 @@ export const raw_frame = derived(message, ($message: any, set) => {
     set($message.data);
 }, "");
 
+export const status = derived(message, ($message: any, set) => {
+    if ($message?.type !== "status") return;
+    set($message.data);
+}, {logging: false});
+
 /* Combines header and data streams to create data objects for rendering */
 export const frame = derived([raw_frame, header], ([$raw_frame, $header]) => {
     const parts = $raw_frame.split(',').map(v => v.trim()).filter(v => v);

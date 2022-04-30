@@ -14,7 +14,7 @@
 #include "SDManager.h"
 #include <CircularBuffer.h>
 
-#define SSID "daqdrew 🥵🍆💦"
+#define SSID "daqdrewwww 🥵🍆💦"
 
 #define DATA_SERIAL Serial2
 #define DATA_BAUD 2000000
@@ -45,6 +45,16 @@ SDManager sd_manager(debug);
 volatile size_t is_responding = false;
 /* Declariations */
 extern const char header[]; //Defined with the writing function below :)
+
+enum class State {
+    IDLE,
+    LOGGING,
+    ERROR_LOG_INIT,
+    RESET,
+};
+
+
+State state;
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data,
@@ -83,6 +93,15 @@ void api_set_meta(AsyncWebServerRequest *req) {
     sd_manager.scan_runs();
     yield();
     socket.textAll(R"({"type":"event", "data": "runs"})");
+}
+
+void api_stop(AsyncWebServerRequest *req) {
+    char path[256];
+    state = State::RESET;
+}
+
+void api_start(AsyncWebServerRequest *req) {
+    state = State::LOGGING;
 }
 
 [[noreturn]] void setup_fail() {
@@ -136,6 +155,9 @@ void setup() {
 
     debug << "Starting server" << endl;
     server.on("/api/setmeta", HTTP_GET, api_set_meta);
+    server.on("/api/start", HTTP_GET, api_start);
+    server.on("/api/stop", HTTP_GET, api_stop);
+
     server.serveStatic("/r.txt", SD, "/r.txt", "no-cache");
     server.serveStatic("/", SD, "/").setDefaultFile("index.html");
 //    server.on("/*", [](AsyncWebServerRequest *req) {
@@ -154,12 +176,6 @@ void setup() {
     }
 }
 
-enum class State {
-    IDLE,
-    LOGGING,
-    ERROR_LOG_INIT,
-    RESET,
-};
 
 Data *parse_data() {
     static Data data{};
@@ -198,7 +214,7 @@ Data *parse_data() {
             state = PAYLOAD_;
             dp = 0;
         case PAYLOAD_:
-            ((uint8_t *) &data)[dp] = b;
+            ((uint8_t * ) & data)[dp] = b;
             if (dp >= sizeof(Data) - 1) {
                 state = TRAILER;
             }
@@ -226,6 +242,12 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         Serial.printf("ws[%s][%u] connect\n", server->url(), client->id());
         SocketAPI::emitHeader(client, header);
         SocketAPI::emitRunEvent(client, "runs");
+        if(sd_manager.is_logging()) {
+            client->text(R"({"type":"status", "data": {"logging": true}})");
+        } else {
+            client->text(R"({"type":"status", "data": {"logging": false}})");
+        }
+
         client->ping();
     } else if (type == WS_EVT_DISCONNECT) {
         Serial.printf("ws[%s][%u] disconnect\n", server->url(), client->id());
@@ -245,7 +267,6 @@ size_t write_csv_line(char *buf, Data *d);
 size_t last_push = 0;
 
 void loop() {
-    static State state;
 
     static char print_buf[512];
     Data *dat_ptr;
@@ -260,7 +281,7 @@ void loop() {
         //debug << sd_manager.sd_buf_head << "\t" << sd_manager.sd_buf_tail << endl;
         size_t num_written = write_csv_line(print_buf, dat_ptr);
         if (state == State::LOGGING) {
-            sd_manager.write((uint8_t *) (print_buf), num_written);
+            sd_manager.write((uint8_t * )(print_buf), num_written);
         }
         if (millis() - last_push > 500) {
             last_push = millis();
@@ -286,13 +307,13 @@ void loop() {
                     break;
                 }
                 while (DATA_SERIAL.available()) { DATA_SERIAL.read(); } // Clear buffered data!
-                sd_manager.write((uint8_t *) &header, strlen(header));
+                sd_manager.write((uint8_t * ) & header, strlen(header));
                 sd_manager.write((uint8_t *) F("\n"), 1);
 
                 debug << header << "\t" << strlen(header) << endl;
+                socket.textAll(R"({"type":"status", "data": {"logging": true}})");
             }
             if (log_btn.isTriggered()) {
-                sd_manager.close_log();
                 state = State::RESET;
             }
             //SD WRITING HANDLED OUTSIDE OF FSM KINDA (ABOVE)
@@ -305,9 +326,13 @@ void loop() {
             break;
         case State::RESET:
             debug << "Logger reset!" << endl;
+            sd_manager.close_log();
+
             sd_manager.scan_runs();
 
             socket.textAll(R"({"type":"event", "data": "runs"})");
+            socket.textAll(R"({"type":"status", "data":{"logging":false}})");
+
             daq_led.Off(1).Forever();
             state = State::IDLE;
             break;
@@ -330,7 +355,8 @@ size_t write_csv_line(char *buf, Data *d) {
             d->time, d->rwSpeed,
             d->eState, d->eSpeed, d->ePID, d->eP, d->eI, d->eD,
             d->pState, d->pEncoder, d->pLoadCell, d->pCurrent, d->pPID,
-            d->sState, d->sEncoder, d->sLoadCell, d->sCurrent, d->sPID, d->sEncoderPID, d->sLoadCellPID, d->sLoadCellP,
+            d->sState, d->sEncoder, d->sLoadCell, d->sCurrent, d->sPID,
+            d->sEncoderPID, d->sLoadCellPID, d->sLoadCellP,
             d->sLoadCellI, d->sLoadCellD);
     return strlen(buf);
 }

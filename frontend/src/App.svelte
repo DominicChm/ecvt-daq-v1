@@ -1,6 +1,16 @@
 <script lang="ts">
-    import {Collapse, Nav, Navbar, NavbarBrand, NavbarToggler, NavItem, NavLink, Spinner} from 'sveltestrap';
-    import {connected} from "./stores";
+    import {
+        Button,
+        Collapse,
+        Nav,
+        Navbar,
+        NavbarBrand,
+        NavbarToggler,
+        NavItem,
+        NavLink,
+        Spinner
+    } from 'sveltestrap';
+    import {connected, status} from "./stores";
     import Dash from "./Dash.svelte";
     import Router, {replace} from 'svelte-spa-router'
     import Runs from "./Runs.svelte";
@@ -9,7 +19,9 @@
     import {onMount} from "svelte";
 
     const NAVBAR_COLOR = "light";
-    onMount(() => {replace("/runs")})
+    onMount(() => {
+        replace("/runs")
+    })
     const routes = {
         // '/': Dash,
         '/runs': Runs,
@@ -36,18 +48,34 @@
     <NavbarToggler on:click={() => (isOpen = !isOpen)}/>
     <Collapse {isOpen} navbar expand="md" on:update={handleUpdate}>
         <Nav class="ms-auto" navbar>
-<!--            <NavItem>-->
-<!--                <NavLink href="#/">Home</NavLink>-->
-<!--            </NavItem>-->
+            <!--            <NavItem>-->
+            <!--                <NavLink href="#/">Home</NavLink>-->
+            <!--            </NavItem>-->
             <NavItem>
                 <NavLink href="#/runs">Runs</NavLink>
             </NavItem>
             <NavItem>
                 <NavLink href="#/raw">Raw Data</NavLink>
             </NavItem>
-<!--            <NavItem>-->
-<!--                <NavLink href="#/stats">Stats</NavLink>-->
-<!--            </NavItem>-->
+            <NavItem>
+                {#if ($status.logging)}
+                    <Button color="primary" href="/api/stop"
+                            target="my_iframe">Stop Log
+                    </Button>
+                {:else }
+                    <Button color="primary" href="/api/start"
+                            target="my_iframe">Start
+                        Log
+                    </Button>
+
+                {/if}
+            </NavItem>
+
+            <iframe id="iframe" name="my_iframe" style="display: none"></iframe>
+
+            <!--            <NavItem>-->
+            <!--                <NavLink href="#/stats">Stats</NavLink>-->
+            <!--            </NavItem>-->
 
         </Nav>
     </Collapse>
