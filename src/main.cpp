@@ -17,7 +17,7 @@
 #define SSID "daqdrewwww 🥵🍆💦"
 
 #define DATA_SERIAL Serial2
-#define DATA_BAUD 2000000
+#define DATA_BAUD 115200
 #define DATA_MAGIC_START 0xAA
 
 size_t orate = 0;
