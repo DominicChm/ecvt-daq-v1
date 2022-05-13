@@ -1,5 +1,7 @@
 #include <Arduino.h>
 
+#ifndef DEBOUNCED_BUTTON_H
+#define DEBOUNCED_BUTTON_H
 class DebouncedButton {
 private:
     uint32_t next_trigger = 0;
@@ -43,3 +45,4 @@ public:
 
     };
 };
+#endif

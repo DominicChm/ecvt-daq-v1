@@ -4,6 +4,7 @@
 #ifndef SDMANAGER_H
 #define SDMANAGER_H
 
+#include <CircularBuffer.h>
 #include "Arduino.h"
 #include <SD.h>
 #include "PrintMessage.h"
@@ -15,37 +16,74 @@
 
 class SDManager {
 public:
+    CircularBuffer<uint32_t, 10> time_buf;
+
+    struct {
+        uint32_t num_overflows;
+        uint32_t num_writes;
+
+        uint32_t t_write_last;
+        uint32_t t_write_avg;
+
+        uint32_t data_rate_Bps;
+
+        bool logging;
+    } status;
+
     fs::File log_file;
     ArduinoOutStream debug;
-    bool logging = false;
 
     char filepath[256];
 
-    uint8_t sd_buf[1024 * 32];
-    size_t sd_buf_head;
-    size_t sd_buf_tail;
+    CircularBuffer<uint8_t, 1024 * 32> sd_buf;
     uint8_t write_buf[1024 * 16];
 
     explicit SDManager(ArduinoOutStream &debug) : debug(debug) {};
 
     void loop() {
-        if (num_unwritten() > sizeof(write_buf)) {
-            size_t size_read = read_sd_buf(write_buf, sizeof(write_buf));
-            if (log_file.write(write_buf, size_read) != size_read) {
-                debug << "ERROR WRITING LOG" << endl;
-            }
+        if (sd_buf.available() > sizeof(write_buf)) {
+            write_buffers();
         }
     }
 
 /*
- * Writes data into the SD's circular buffer.
+ * Writes sd_buf into the SD's circular buffer.
  */
-    size_t write(uint8_t *buf, size_t size) {
-        for (size_t i = 0; i < size; ++i, ++sd_buf_head) {
-            sd_buf[sd_buf_head % sizeof(sd_buf)] = buf[i];
+    void write_buffers() {
+        status.t_write_last = millis();
+
+        size_t size_read = read_sd_buf(write_buf, sizeof(write_buf));
+        if (log_file.write(write_buf, size_read) != size_read) {
+            debug << "ERROR WRITING LOG" << endl;
         }
-        if (sd_buf_head - sd_buf_tail >= sizeof(sd_buf)) sd_buf_tail = sd_buf_head - sizeof(sd_buf) + 1;
-        return size;
+
+        // Performance tracking
+        status.num_writes++;
+        status.t_write_last = millis() - status.t_write_last;
+        status.data_rate_Bps = sizeof(write_buf) * 1000 / status.t_write_last;
+        time_buf.push(status.t_write_last);
+        update_time_avg();
+    }
+
+    void update_time_avg() {
+        status.t_write_avg = 0;
+        for (size_t i = 0; i < time_buf.available(); i++) {
+            status.t_write_avg += time_buf[i];
+        }
+        status.t_write_avg /= time_buf.available();
+    }
+
+    size_t write(uint8_t *buf, size_t size) {
+        size_t i;
+        for (i = 0; i < size && !sd_buf.isFull(); i++) {
+            sd_buf.push(buf[i]);
+        }
+
+        if (i < size) {
+            status.num_overflows += size - i;
+        }
+
+        return i;
     }
 
 
@@ -89,11 +127,11 @@ public:
         if (!SD.begin(SD_CS, SPI, 40000000))
             return false;
 
-        delay(200);
         if (!SD.exists(RUNS_DIR))
             SD.mkdir(RUNS_DIR);
 
         scan_runs();
+
         debug << F("Card initialized!") << endl;
         return true;
     }
@@ -101,23 +139,32 @@ public:
     bool close_log() {
         if (!is_logging()) return false;
 
+        /* Write all unwritten blocks */
         while (num_unwritten() > 0) {
             size_t size_read = read_sd_buf(write_buf, sizeof(write_buf));
             log_file.write(write_buf, size_read);
         }
 
         log_file.close();
-        logging = false;
+
+        status = {};
+        status.logging = false;
+//        status.num_overflows = 0;
+//        status.num_writes = 0;
+//        status.t_write_last = 0;
+//        status.t_write_avg = 0;
+//        status.data_rate_Bps = 0;
+
         return true;
     }
 
     bool is_logging() {
-        return logging;
+        return status.logging;
     }
 
     bool init_log() {
         if (is_logging()) return false;
-        logging = true;
+        status.logging = true;
         char metafile_path[256];
 
         //Select next filename
@@ -128,10 +175,10 @@ public:
         } while (SD.exists(filepath));
 
 
-        debug << "Writing data to " << filepath << endl;
+        debug << "Writing sd_buf to " << filepath << endl;
         debug << "Writing META to " << metafile_path << endl;
 
-        sd_buf_tail = sd_buf_head;
+        sd_buf.clear();
 
         File f = SD.open(metafile_path, "w");
         f.printf("Run #%d`No description", file_idx);
@@ -141,19 +188,18 @@ public:
     }
 
     size_t num_unwritten() {
-        return sd_buf_head - sd_buf_tail;
+        return sd_buf.available();
     }
-
 
 private:
 
-    /*
- * Reads data from the SD's circular buffer. Returns the number of bytes read.
+/*
+ * Reads sd_buf from the SD's circular buffer. Returns the number of bytes read.
  */
     size_t read_sd_buf(uint8_t *buf, size_t size) {
-        size_t i = 0;
-        for (; i < size && sd_buf_head - sd_buf_tail > 0; ++i, ++sd_buf_tail) {
-            buf[i] = sd_buf[sd_buf_tail % sizeof(sd_buf)];
+        size_t i;
+        for (i = 0; i < size && !sd_buf.isEmpty(); i++) {
+            buf[i] = sd_buf.pop();
         }
         return i;
     }
