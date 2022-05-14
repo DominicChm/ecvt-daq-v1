@@ -343,20 +343,26 @@ void loop() {
 /* UPDATE WHENEVER DATA DOES */
 const char header[] = "time, rwSpeed, "
                       "eState, eSpeed, ePID, eP, eI, eD, "
-                      "pState, pEncoder, pLoadCell, pCurrent, pPID, "
-                      "sState, sEncoder, sLoadCell, sCurrent, sPID, "
-                      "sEncoderPID, sLoadCellPID, sLoadCellP, sLoadCellI, sLoadCellD";
+                      "pState, pEncoder, pLoadCellForce, pMotorCurrent, "
+                      "pControllerOutput, "
+                      "sState, sEncoder, sLoadCellForce, sMotorCurrent, "
+                      "sControllerOutput, sEncoderPID, sLoadCellPID, "
+                      "sLoadCellP, sLoadCellI, sLoadCellD, "
+                      "fBrakePressure, rBrakePressure";
 
 size_t write_csv_line(char *buf, Data *d) {
     sprintf(buf, "%u,%d,"
                  "%d,%d,%d,%d,%d,%d,"
                  "%d,%d,%d,%d,%d,"
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,"
+                 "%d,%d\n",
             d->time, d->rwSpeed,
             d->eState, d->eSpeed, d->ePID, d->eP, d->eI, d->eD,
-            d->pState, d->pEncoder, d->pLoadCell, d->pCurrent, d->pPID,
-            d->sState, d->sEncoder, d->sLoadCell, d->sCurrent, d->sPID,
-            d->sEncoderPID, d->sLoadCellPID, d->sLoadCellP,
-            d->sLoadCellI, d->sLoadCellD);
+            d->pState, d->pEncoder, d->pLoadCellForce, d->pMotorCurrent,
+            d->pControllerOutput,
+            d->sState, d->sEncoder, d->sLoadCellForce, d->sMotorCurrent,
+            d->sControllerOutput, d->sEncoderPID, d->sLoadCellPID,
+            d->sLoadCellP, d->sLoadCellI, d->sLoadCellD,
+            d->fBrakePressure, d->rBrakePressure);
     return strlen(buf);
 }
