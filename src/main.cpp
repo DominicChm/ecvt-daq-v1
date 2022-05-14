@@ -69,6 +69,7 @@ void setup() {
         daq_led.Update();
         builtin_led.Update();
     }
+    builtin_led.Off().Forever();
 }
 
 
@@ -197,7 +198,7 @@ void loop() {
         case State::RESET:
             debug << "Logger reset!" << endl;
             sd_manager.close_log();
-            sd_manager.scan_runs();
+            sd_manager.init_run_db();
 
             ws_api::emit_runs();
             ws_api::emit_status();

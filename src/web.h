@@ -48,9 +48,7 @@ namespace ws_api {
 
     void emit_frame(const char* data, opt_client) {
         doc["type"] = "status";
-        doc["data"] = sd_manager.status.logging;
-
-
+        doc["frame"] = data;
         json_all(client);
     };
 
@@ -102,6 +100,7 @@ namespace http_api {
         char path[256];
         char filename[256];
         snprintf(path, 256, "/r/%s", req->getParam("file")->value().c_str());
+
         if (!SD.exists(path)) {
             req->send(304, "", "Target file doesn't exist");
             return;
@@ -117,18 +116,17 @@ namespace http_api {
               << "\tname:" << req->getParam("name")->value()
               << "\tdesc:" << req->getParam("desc")->value()
               << "\tfile:" << req->getParam("file")->value() << endl;
+
         File f = SD.open(path, "w");
         f.print(req->getParam("name")->value());
         f.print("`");
         f.print(req->getParam("desc")->value());
-        //req->getParam("name")->value().c_str();
-        //req->getParam("desc")->value().c_str();
         req->send(200, "", "OK");
         f.close();
 
         // Yield to give the ESP some time before rescanning.
         yield();
-        sd_manager.scan_runs();
+        sd_manager.init_run_db();
         yield();
         ws_api::emit_runs();
     }

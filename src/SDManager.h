@@ -9,10 +9,22 @@
 #include <SD.h>
 #include "PrintMessage.h"
 #include "util.h"
+#include <ArduinoJson.h>
 
 #define RUNS_DIR "/r"
+#define RUNS_DB "/r.jsonl"
 
 #define SD_CS 5
+
+/*
+metafile:
+ {
+    file_base: "run3.csv",
+    name: "this is a name",
+    desc: "description",
+ }
+ */
+
 
 class SDManager {
 public:
@@ -34,6 +46,7 @@ public:
     ArduinoOutStream debug;
 
     char filepath[256];
+    char filename[256];
 
     CircularBuffer<uint8_t, 1024 * 32> sd_buf;
     uint8_t write_buf[1024 * 16];
@@ -60,20 +73,24 @@ public:
         // Performance tracking
         status.num_writes++;
         status.t_write_last = millis() - status.t_write_last;
-        status.data_rate_Bps = sizeof(write_buf) * 1000 / status.t_write_last;
+        if (status.t_write_last > 0)
+            status.data_rate_Bps =
+                    sizeof(write_buf) * 1000 / status.t_write_last;
         time_buf.push(status.t_write_last);
         update_time_avg();
     }
 
     void update_time_avg() {
+        if (time_buf.isEmpty()) return;
         status.t_write_avg = 0;
         for (size_t i = 0; i < time_buf.available(); i++) {
             status.t_write_avg += time_buf[i];
         }
-        status.t_write_avg /= time_buf.available();
+        //status.t_write_avg /= time_buf.available();
     }
 
     size_t write(uint8_t *buf, size_t size) {
+        if (!is_logging()) return 0;
         size_t i;
         for (i = 0; i < size && !sd_buf.isFull(); i++) {
             sd_buf.push(buf[i]);
@@ -86,41 +103,35 @@ public:
         return i;
     }
 
+    void add_db_entry_from_metafile(fs::File metafile, fs::File db) {
+        StaticJsonDocument<1024> doc;
+        deserializeJson(doc, metafile);
 
-    void scan_runs() {
-        char meta_base[256];
-        char meta_path[256];
-        uint8_t buf[256];
+        doc["type"] = "entry";
+        serializeJson(doc, db);
+        db.println();
+    }
 
-        fs::File runs = SD.open("/r.txt", FILE_WRITE);
+    void add_entry_from_metafile(fs::File metafile) {
+        File db = SD.open(RUNS_DB, "a");
+        add_db_entry_from_metafile(metafile, db);
+        db.close();
+    }
+
+    void init_run_db() {
+        SD.remove(RUNS_DB);
+
+        fs::File run_db = SD.open(RUNS_DB, "a");
         fs::File run_dir = SD.open(RUNS_DIR);
         fs::File file;
 
         while ((file = run_dir.openNextFile())) {
-            if (get_ext(file.name()) == Ext::CSV) {
-                debug << file.name() << endl;
-                runs.printf("%s`", file.name());
-                get_base(meta_base, file.name(), 256);
-                file.close();
-
-                snprintf(meta_path, 256, RUNS_DIR"/%s.met", meta_base);
-
-                file = SD.open(meta_path);
-
-                // Copy the contents of META into r. Should be same format (ie '`' delimited)
-                while (file.available() > 0) {
-                    size_t size = min(256, file.available());
-                    file.read(buf, size);
-                    runs.write(buf, size);
-                }
-
-                file.close();
-                runs.printf("\n");
-            }
+            if (get_ext(file.name()) != Ext::META) continue;
+            add_db_entry_from_metafile(file, run_db);
+            file.close();
         }
-        run_dir.close();
-        runs.flush();
-        runs.close();
+
+        run_db.close();
     }
 
     bool init() {
@@ -130,7 +141,7 @@ public:
         if (!SD.exists(RUNS_DIR))
             SD.mkdir(RUNS_DIR);
 
-        scan_runs();
+        init_run_db();
 
         debug << F("Card initialized!") << endl;
         return true;
@@ -166,23 +177,34 @@ public:
         if (is_logging()) return false;
         status.logging = true;
         char metafile_path[256];
-
+        char filebase[30];
         //Select next filename
         int file_idx = 0;
         do {
             snprintf(metafile_path, 256, RUNS_DIR"/%d.met", file_idx);
-            snprintf(filepath, 256, RUNS_DIR"/%d.csv", file_idx++);
+            snprintf(filebase, 30, "%d", file_idx++);
+            snprintf(filename, 256, "%s.csv", filebase);
+            snprintf(filepath, 256, RUNS_DIR"/%s", filename);
+
         } while (SD.exists(filepath));
 
+        sd_buf.clear();
 
         debug << "Writing sd_buf to " << filepath << endl;
         debug << "Writing META to " << metafile_path << endl;
 
-        sd_buf.clear();
 
+        StaticJsonDocument<1024> doc;
         File f = SD.open(metafile_path, "w");
-        f.printf("Run #%d`No description", file_idx);
-        f.close();
+
+        doc["file_base"] = filebase;
+        doc["name"] = "no set name";
+        doc["description"] = "no desc";
+
+        serializeJson(doc, f);
+        f.flush();
+
+        add_entry_from_metafile(f);
 
         return log_file = SD.open(filepath, "w");
     }
