@@ -1,6 +1,7 @@
-
-#include <Arduino.h>
 #include "global.h"
+
+#include "commparser.h"
+#include <Arduino.h>
 #include <sdios.h>
 #include <SPI.h>
 #include "web.h"
@@ -9,24 +10,13 @@
 #include "Communications.h"
 #include <WiFi.h>
 #include "SDManager.h"
-#include <CircularBuffer.h>
-
-
-State state;
-
-/* I/O */
-JLed daq_led(PIN_DAQ_LED);
-JLed builtin_led(LED_BUILTIN);
-DebouncedButton log_btn(PIN_BTN_LOG, 250);
-ArduinoOutStream debug(Serial);
-
-/* SD Definitions */
-SDManager sd_manager(debug);
 
 /* Declariations */
 
 
 void setup() {
+    using namespace global;
+
     // Set LED into a default failure state to easily fail.
     builtin_led.Blink(100, 100).Forever();
     daq_led.Blink(100, 100).Forever();
@@ -72,84 +62,23 @@ void setup() {
     builtin_led.Off().Forever();
 }
 
-
-Data *parse_data() {
-    static Data data{};
-    static size_t packet_index;
-    static size_t dp;
-
-    static enum {
-        IDLE,
-        _IDLE,
-
-        PAYLOAD,
-        PAYLOAD_,
-
-        TRAILER,
-        TRAILER_,
-    } state;
-
-    if (DATA_SERIAL.available() > 1000) debug << "WEEWOO" << endl;
-    if (!DATA_SERIAL.available()) return nullptr;
-    uint8_t b = DATA_SERIAL.read();
-    //debug << "DAT" << endl;
-
-    switch (state) {
-        case IDLE:
-            state = _IDLE;
-            packet_index = 0;
-        case _IDLE:
-            if (b != DATA_MAGIC_START) {
-                state = IDLE; //RESET
-            } else if (packet_index >= 1) {
-                state = PAYLOAD;
-            }
-            break;
-
-        case PAYLOAD:
-            state = PAYLOAD_;
-            dp = 0;
-        case PAYLOAD_:
-            ((uint8_t *) &data)[dp] = b;
-            if (dp >= sizeof(Data) - 1) {
-                state = TRAILER;
-            }
-            break;
-
-        case TRAILER:
-            state = TRAILER_;
-            dp = 0;
-        case TRAILER_:
-            if (dp >= 1) {
-                state = IDLE;
-                return &data;
-            }
-            break;
-    }
-    packet_index++;
-    dp++;
-    return nullptr;
-}
-
-
 size_t write_csv_line(char *buf, Data *d);
 
 size_t last_push = 0;
 
 void loop() {
+    using namespace global;
 
     static char print_buf[512];
-    Data *dat_ptr;
+    static Data data;
 
     daq_led.Update();
     sd_manager.loop();
     builtin_led.Update();
 
-    if ((dat_ptr = parse_data()) != nullptr) {
+    if (parse_data(&data)) {
         //Buffer the new packet
-        //debug << dat_ptr->time << endl;
-        //debug << sd_manager.sd_buf_head << "\t" << sd_manager.sd_buf_tail << endl;
-        size_t num_written = write_csv_line(print_buf, dat_ptr);
+        size_t num_written = write_csv_line(print_buf, &data);
         if (state == State::LOGGING) {
             sd_manager.write((uint8_t *) (print_buf), num_written);
         }
@@ -199,11 +128,13 @@ void loop() {
             debug << "Logger reset!" << endl;
             sd_manager.close_log();
             sd_manager.init_run_db();
+            debug << "Log closed!" << endl;
+
+            daq_led.Off(1).Forever();
 
             ws_api::emit_runs();
             ws_api::emit_status();
 
-            daq_led.Off(1).Forever();
             state = State::IDLE;
             break;
 
@@ -211,22 +142,28 @@ void loop() {
 }
 
 /* UPDATE WHENEVER DATA DOES */
-const char header[] = "time, rwSpeed, "
-                      "eState, eSpeed, ePID, eP, eI, eD, "
-                      "pState, pEncoder, pLoadCell, pCurrent, pPID, "
-                      "sState, sEncoder, sLoadCell, sCurrent, sPID, "
-                      "sEncoderPID, sLoadCellPID, sLoadCellP, sLoadCellI, sLoadCellD";
+const char global::header[] = "time, rwSpeed, "
+                              "eState, eSpeed, ePID, eP, eI, eD, "
+                              "pState, pEncoder, pLoadCellForce, pMotorCurrent, "
+                              "pControllerOutput, "
+                              "sState, sEncoder, sLoadCellForce, sMotorCurrent, "
+                              "sControllerOutput, sEncoderPID, sLoadCellPID, "
+                              "sLoadCellP, sLoadCellI, sLoadCellD, "
+                              "fBrakePressure, rBrakePressure";
 
 size_t write_csv_line(char *buf, Data *d) {
     sprintf(buf, "%u,%d,"
                  "%d,%d,%d,%d,%d,%d,"
                  "%d,%d,%d,%d,%d,"
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,"
+                 "%d,%d\n",
             d->time, d->rwSpeed,
             d->eState, d->eSpeed, d->ePID, d->eP, d->eI, d->eD,
-            d->pState, d->pEncoder, d->pLoadCell, d->pCurrent, d->pPID,
-            d->sState, d->sEncoder, d->sLoadCell, d->sCurrent, d->sPID,
-            d->sEncoderPID, d->sLoadCellPID, d->sLoadCellP,
-            d->sLoadCellI, d->sLoadCellD);
+            d->pState, d->pEncoder, d->pLoadCellForce, d->pMotorCurrent,
+            d->pControllerOutput,
+            d->sState, d->sEncoder, d->sLoadCellForce, d->sMotorCurrent,
+            d->sControllerOutput, d->sEncoderPID, d->sLoadCellPID,
+            d->sLoadCellP, d->sLoadCellI, d->sLoadCellD,
+            d->fBrakePressure, d->rBrakePressure);
     return strlen(buf);
 }

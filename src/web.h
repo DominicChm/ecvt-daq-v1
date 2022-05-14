@@ -12,6 +12,8 @@
 #define opt_client AsyncWebSocketClient *client = nullptr
 
 namespace ws_api {
+    using namespace global;
+
     AsyncWebSocket socket("/ws");
     StaticJsonDocument<WS_BUFFER_SIZE> doc;
     char socket_buf[WS_BUFFER_SIZE];
@@ -46,7 +48,7 @@ namespace ws_api {
         json_all(client);
     };
 
-    void emit_frame(const char* data, opt_client) {
+    void emit_frame(const char *data, opt_client) {
         doc["type"] = "status";
         doc["frame"] = data;
         json_all(client);
@@ -91,6 +93,7 @@ namespace ws_api {
 
 
 namespace http_api {
+    using namespace global;
 
     void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                    AwsEventType type, void *arg, uint8_t *data,
@@ -142,6 +145,8 @@ namespace http_api {
 }
 
 namespace web {
+    using namespace global;
+
     /* Server Defs */
     AsyncWebServer server(80);
 

@@ -9,6 +9,8 @@ struct Data
 {
     uint32_t time;
     int16_t rwSpeed;
+    int16_t fBrakePressure;
+    int16_t rBrakePressure;
     // Engine
     int8_t eState;
     int16_t eSpeed;
@@ -19,15 +21,15 @@ struct Data
     // Primary
     int8_t pState;
     int32_t pEncoder;
-    int16_t pLoadCell;
-    int16_t pCurrent;
-    int16_t pPID;
+    int16_t pLoadCellForce;
+    int16_t pMotorCurrent;
+    int16_t pControllerOutput;
     // Secondary
     int8_t sState;
     int32_t sEncoder;
-    int16_t sLoadCell;
-    int16_t sCurrent;
-    int16_t sPID;
+    int16_t sLoadCellForce;
+    int16_t sMotorCurrent;
+    int16_t sControllerOutput;
     int16_t sEncoderPID;
     int16_t sLoadCellPID;
     int16_t sLoadCellP;
