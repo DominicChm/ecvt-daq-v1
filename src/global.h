@@ -49,6 +49,8 @@ namespace global {
     extern SDManager sd_manager;
 
     extern const char header[]; //Defined with the writing function below :)
+
+    extern char print_buf[512];
 }
 
 

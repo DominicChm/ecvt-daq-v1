@@ -68,8 +68,6 @@ size_t last_push = 0;
 
 void loop() {
     using namespace global;
-
-    static char print_buf[512];
     static Data data;
 
     daq_led.Update();
@@ -82,12 +80,10 @@ void loop() {
         if (state == State::LOGGING) {
             sd_manager.write((uint8_t *) (print_buf), num_written);
         }
-        if (millis() - last_push > 500) {
-            last_push = millis();
-            print_buf[num_written - 1] = '\0';
-            ws_api::emit_frame(print_buf);
-        }
+
     }
+
+    ws_api::loop();
 
     switch (state) {
         case State::IDLE:
@@ -110,7 +106,7 @@ void loop() {
                 sd_manager.write((uint8_t *) F("\n"), 1);
 
                 debug << header << "\t" << strlen(header) << endl;
-                ws_api::emit_status();
+
             }
             if (log_btn.isTriggered()) {
                 state = State::RESET;
@@ -129,12 +125,7 @@ void loop() {
             sd_manager.close_log();
             sd_manager.init_run_db();
             debug << "Log closed!" << endl;
-
             daq_led.Off(1).Forever();
-
-            ws_api::emit_runs();
-            ws_api::emit_status();
-
             state = State::IDLE;
             break;
 

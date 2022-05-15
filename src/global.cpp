@@ -19,3 +19,4 @@ ArduinoOutStream global::debug(Serial);
 /* SD Definitions */
 SDManager global::sd_manager(global::debug);
 
+char global::print_buf[512];

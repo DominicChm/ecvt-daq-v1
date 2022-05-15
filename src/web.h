@@ -89,6 +89,22 @@ namespace ws_api {
             Serial.println("Ws DATA");
         }
     }
+
+    void loop() {
+        static unsigned long last_frame = 0;
+
+        if (millis() - last_frame > 500) {
+            last_frame = millis();
+
+            if (strlen(print_buf))
+                emit_frame(print_buf);
+
+            emit_status();
+
+            ws_api::emit_runs();
+
+        }
+    }
 }
 
 

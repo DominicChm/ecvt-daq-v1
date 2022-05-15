@@ -46,6 +46,8 @@ public:
     fs::File log_file;
     ArduinoOutStream debug;
 
+    bool new_patch = false;
+    StaticJsonDocument<JSON_SIZE> last_db_entry;
     char filepath[256];
     char filename[256];
     char filebase[30];
@@ -108,9 +110,9 @@ public:
      * Reads in a metadata file and adds it to the run database.
      */
     void load_run_metafile(File f) {
-        DynamicJsonDocument doc(JSON_SIZE);
-        deserializeJson(doc, f);
-        add_entry_from_json(doc);
+        last_db_entry.clear();
+        deserializeJson(last_db_entry, f);
+        append_db();
     }
 
     /*
@@ -118,31 +120,31 @@ public:
      * adds it to the run database.
      */
     void set_run_metadata(const char *base_name, const char *name, const char *description) {
-        DynamicJsonDocument doc(JSON_SIZE);
+        last_db_entry.clear();
+
+        last_db_entry["type"] = "entry";
+        last_db_entry["file_base"] = base_name;
+        last_db_entry["name"] = name;
+        last_db_entry["description"] = description;
+
         char path[256];
         snprintf(path, 256, RUNS_DIR"/%s.met", base_name);
         File f = SD.open(path, "w");
-
-        doc["file_base"] = base_name;
-        doc["name"] = name;
-        doc["description"] = description;
-
-        serializeJson(doc, f);
+        serializeJson(last_db_entry, f);
         f.close();
 
-        add_entry_from_json(doc);
+        append_db();
     }
 
-    /*
-     * Adds a JSON entry to the run database.
-     */
-    void add_entry_from_json(DynamicJsonDocument src) {
+    /* Appends the DB with last_patch */
+    void append_db() {
         File db = SD.open(RUNS_DB, "a");
         StaticJsonDocument<JSON_SIZE> doc;
-        src["type"] = "entry";
+
         serializeJson(doc, db);
         db.println();
         db.close();
+        new_patch = true;
     }
 
     /*
