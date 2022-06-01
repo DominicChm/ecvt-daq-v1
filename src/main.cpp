@@ -14,7 +14,8 @@
 #include "SDManager.h"
 #include <CircularBuffer.h>
 
-#define SSID "daqdrewwww 🥵🍆💦"
+#define SSID "Cal Poly Racing"
+#define PASSWORD "blameandrew"
 
 #define DATA_SERIAL Serial2
 #define DATA_BAUD 115200
@@ -118,8 +119,10 @@ void api_start(AsyncWebServerRequest *req) {
 void setup() {
     DATA_SERIAL.begin(DATA_BAUD);
     DATA_SERIAL.setRxBufferSize(1024);
+
     Serial.begin(115200);
     debug << "CPU Clock: " << getCpuFrequencyMhz() << endl;
+
     // Set LED into a default failure state to easily fail.
     builtin_led.Blink(100, 100).Forever();
     daq_led.Blink(100, 100).Forever();
@@ -128,23 +131,17 @@ void setup() {
     socket.onEvent(onWsEvent);
     server.addHandler(&socket);
 
-//    debug << "Starting MDNS" << endl;
-//    if (!MDNS.begin("ecvt")) {
-//        debug << "Error starting mDNS" << endl;
-//
-//        while (true) {
-//            daq_led.Update();
-//            builtin_led.Update();
-//        }
-//    }
-
     debug << "Starting AP" << endl;
     WiFi.softAPConfig(
             IPAddress(192, 168, 1, 1),
             IPAddress(192, 168, 1, 1),
             IPAddress(255, 255, 255, 0)
     );
+#ifdef PASSWORD
+    WiFi.softAP(SSID, PASSWORD);
+#else
     WiFi.softAP(SSID);
+#endif
     debug << "Local IP: " << WiFi.localIP() << endl;
 
     debug << "Initializing SD" << endl;
