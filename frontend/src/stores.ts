@@ -30,8 +30,9 @@ export const socket = readable<null | WebSocket>(null, (set) => {
     }
 
     function connect() {
+        // ws = new
         ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/ws`);
-        //ws = new WebSocket(`ws://192.168.1.2:80/ws`);
+        // ws = new WebSocket(`ws://1.2.3.4/ws`);
 
         ws.addEventListener("open", onOpen);
         ws.addEventListener("close", onClose)

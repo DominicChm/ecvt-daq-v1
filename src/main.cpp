@@ -11,9 +11,6 @@
 #include <WiFi.h>
 #include "SDManager.h"
 
-/* Declariations */
-
-
 void setup() {
     using namespace global;
 
@@ -35,9 +32,11 @@ void setup() {
             IPAddress(1, 2, 3, 4),
             IPAddress(255, 255, 255, 0)
     );
+#ifndef PASSWORD
     WiFi.softAP(SSID);
-    debug << "Local IP: " << WiFi.localIP() << endl;
-
+#else
+    WiFi.softAP(SSID, PASSWORD);
+#endif
     debug << "Initializing SD" << endl;
     if (!sd_manager.init()) {
         debug << "SD INIT FAIL!" << endl;
@@ -63,8 +62,6 @@ void setup() {
 }
 
 size_t write_csv_line(char *buf, Data *d);
-
-size_t last_push = 0;
 
 void loop() {
     using namespace global;
@@ -102,11 +99,7 @@ void loop() {
                     break;
                 }
                 while (DATA_SERIAL.available()) { DATA_SERIAL.read(); } // Clear buffered data!
-                sd_manager.write((uint8_t *) &header, strlen(header));
-                sd_manager.write((uint8_t *) F("\n"), 1);
-
-                debug << header << "\t" << strlen(header) << endl;
-
+                sd_manager.log_file.printf("%s\n", header);
             }
             if (log_btn.isTriggered()) {
                 state = State::RESET;

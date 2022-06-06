@@ -112,6 +112,8 @@ public:
     void load_run_metafile(File f) {
         last_db_entry.clear();
         deserializeJson(last_db_entry, f);
+        last_db_entry["type"] = "entry";
+
         append_db();
     }
 
@@ -139,10 +141,10 @@ public:
     /* Appends the DB with last_patch */
     void append_db() {
         File db = SD.open(RUNS_DB, "a");
-        StaticJsonDocument<JSON_SIZE> doc;
 
-        serializeJson(doc, db);
+        serializeJson(last_db_entry, db);
         db.println();
+
         db.close();
         new_patch = true;
     }

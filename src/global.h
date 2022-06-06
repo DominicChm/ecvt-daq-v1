@@ -12,7 +12,8 @@
 #include "DebouncedButton.h"
 #include "SDManager.h"
 
-#define SSID "daqdrewwww 🥵🍆💦"
+#define SSID "_test"
+#define PASSWORD "calpolybaja"
 
 #define DATA_SERIAL Serial2
 #define DATA_BAUD 115200
@@ -23,7 +24,6 @@
 
 namespace global {
     struct Status {
-        bool is_logging;
         uint32_t num_serial_overflows;
         uint32_t num_bytes_read;
     };

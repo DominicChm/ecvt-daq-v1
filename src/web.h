@@ -9,6 +9,9 @@
 #include "ArduinoJson.h"
 
 #define WS_BUFFER_SIZE 1024
+
+// Defines an optional "client" function param. Uses #define b/c it's rather
+// long :)
 #define opt_client AsyncWebSocketClient *client = nullptr
 
 namespace ws_api {
@@ -18,8 +21,11 @@ namespace ws_api {
     StaticJsonDocument<WS_BUFFER_SIZE> doc;
     char socket_buf[WS_BUFFER_SIZE];
 
-
-    void json_all(opt_client) {
+    /**
+     * Sends data to the passed client, or to all clients if a client is not
+     * provided.
+     */
+    void json(opt_client) {
         serializeJson(doc, socket_buf, 1024);
         doc.clear();
 
@@ -29,39 +35,48 @@ namespace ws_api {
             return socket.textAll(socket_buf);
     }
 
+    /* Emits a "run" event */
     void emit_runs(opt_client) {
         doc["type"] = "event";
-        doc["data"] = "runs";
-
-        json_all(client);
+        doc["data"] = "runs_update";
+        json(client);
     }
 
-    void emit_status(opt_client) {
-        doc["type"] = "status";
-        doc["data"]["logging"] = sd_manager.status.logging;
+    void emit_runs_patch(JsonDocument d, opt_client) {
+        doc["type"] = "run_patch";
+        doc["data"] = d;
+        json(client);
+    }
+
+    void emit_stats(opt_client) {
+        doc["type"] = "stats";
         doc["data"]["t_write_last"] = sd_manager.status.t_write_last;
         doc["data"]["t_write_avg"] = sd_manager.status.t_write_avg;
         doc["data"]["data_rate_Bps"] = sd_manager.status.data_rate_Bps;
         doc["data"]["num_overflows"] = sd_manager.status.num_overflows;
         doc["data"]["num_writes"] = sd_manager.status.num_writes;
+        doc["data"]["num_serial_overflow"] = status.num_serial_overflows;
+        doc["data"]["num_bytes_read"] = status.num_bytes_read;
+        json(client);
+    }
 
-        json_all(client);
+    void emit_status(opt_client) {
+        doc["type"] = "status";
+        doc["data"]["logging"] = sd_manager.status.logging;
+        json(client);
     };
 
     void emit_frame(const char *data, opt_client) {
         doc["type"] = "status";
-        doc["frame"] = data;
-        json_all(client);
+        doc["data"] = data;
+        json(client);
     };
-
 
     void emit_header(opt_client) {
         doc["type"] = "header";
         doc["data"] = header;
-
-        json_all(client);
+        json(client);
     }
-
 
     void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                    AwsEventType type, void *arg, uint8_t *data,
@@ -72,6 +87,7 @@ namespace ws_api {
             emit_header(client);
             emit_runs(client);
             emit_status(client);
+            emit_stats(client);
 
             client->ping();
         } else if (type == WS_EVT_DISCONNECT) {
@@ -92,17 +108,18 @@ namespace ws_api {
 
     void loop() {
         static unsigned long last_frame = 0;
+        static unsigned long last_stat = 0;
 
         if (millis() - last_frame > 500) {
             last_frame = millis();
 
             if (strlen(print_buf))
                 emit_frame(print_buf);
+        }
 
-            emit_status();
-
-            ws_api::emit_runs();
-
+        if(millis() - last_stat > 1000) {
+            last_stat = millis();
+            emit_stats();
         }
     }
 }
@@ -174,9 +191,8 @@ namespace web {
         server.on("/api/stop", HTTP_GET, http_api::stop_log);
 
         server.serveStatic("/r.txt", SD, "/r.txt", "no-cache");
-        server.serveStatic("/", SD, "/").setDefaultFile("index.html");
-        server.serveStatic("/*", SD, "404.html");
-
+        server.serveStatic("/", SD, "/index.html");
+        server.serveStatic("/*", SD, "/").setDefaultFile("/404.html");
     }
 
     void begin() {
