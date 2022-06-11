@@ -9,6 +9,7 @@
 #include <SD.h>
 #include "util.h"
 #include <ArduinoJson.h>
+#include <Smoothed.h>
 
 #define RUNS_DIR "/r"
 #define RUNS_DB "/r.jsonl"
@@ -17,6 +18,7 @@
 #define SD_CS 5
 
 #define SD_BUF_CAPACITY 1024 * 32
+
 /*
 metafile:
  {
@@ -29,25 +31,26 @@ metafile:
 
 class SDManager {
 public:
-    CircularBuffer<uint32_t, 10> time_buf;
+    Smoothed<uint32_t> write_times;
 
     struct {
         uint32_t num_overflows = 0;
         uint32_t num_writes = 0;
+        uint32_t num_write_failures = 0;
 
         uint32_t t_write_last = 0;
-        uint32_t t_write_avg = 0;
+        uint32_t t_write_10_avg = 0;
 
         uint32_t data_rate_Bps = 0;
 
         bool logging = false;
-    } status;
+    } stats;
 
     fs::File log_file;
     ArduinoOutStream debug;
 
     bool new_patch = false;
-    StaticJsonDocument<JSON_SIZE> last_db_entry;
+    StaticJsonDocument<JSON_SIZE> json;
     char filepath[256];
     char filename[256];
     char filebase[30];
@@ -55,9 +58,12 @@ public:
     CircularBuffer<uint8_t, SD_BUF_CAPACITY> sd_buf;
     uint8_t write_buf[1024 * 16];
 
-    explicit SDManager(ArduinoOutStream &debug) : debug(debug) {};
+    explicit SDManager(ArduinoOutStream &debug) : debug(debug) {
+        write_times.begin(SMOOTHED_AVERAGE, 10);
+    };
 
     void loop() {
+        // Check if there is enough outgoing data to write a block.
         if (sd_buf.size() > sizeof(write_buf)) {
             write_buffers();
         }
@@ -67,29 +73,20 @@ public:
  * Writes sd_buf into the SD's circular buffer.
  */
     void write_buffers() {
-        status.t_write_last = millis();
+        stats.t_write_last = millis();
 
+        // Copy the FIFO buffer into a contiguous one and write it to log.
         size_t size_read = read_sd_buf(write_buf, sizeof(write_buf));
         if (log_file.write(write_buf, size_read) != size_read) {
+            stats.num_write_failures++;
             debug << "ERROR WRITING LOG" << endl;
+        } else {
+            // Performance tracking
+            stats.num_writes++;
+            stats.t_write_last = millis() - stats.t_write_last;
+            write_times.add(stats.t_write_last);
+            stats.t_write_10_avg = write_times.get();
         }
-
-        // Performance tracking
-        status.num_writes++;
-        status.t_write_last = millis() - status.t_write_last;
-        if (status.t_write_last > 0)
-            status.data_rate_Bps = sizeof(write_buf) * 1000 / status.t_write_last;
-        time_buf.push(status.t_write_last);
-        update_time_avg();
-    }
-
-    void update_time_avg() {
-        if (!time_buf.size()) return;
-        status.t_write_avg = 0;
-        for (size_t i = 0; i < time_buf.size(); i++) {
-            status.t_write_avg += time_buf[i];
-        }
-        status.t_write_avg /= time_buf.size();
     }
 
     size_t write(uint8_t *buf, size_t size) {
@@ -100,7 +97,7 @@ public:
             sd_buf.push(buf[i]);
         }
         if (i < size) {
-            status.num_overflows += size - i;
+            stats.num_overflows += size - i;
         }
 
         return i;
@@ -110,9 +107,9 @@ public:
      * Reads in a metadata file and adds it to the run database.
      */
     void load_run_metafile(File f) {
-        last_db_entry.clear();
-        deserializeJson(last_db_entry, f);
-        last_db_entry["type"] = "entry";
+        json.clear();
+        deserializeJson(json, f);
+        json["type"] = "entry";
 
         append_db();
     }
@@ -121,28 +118,29 @@ public:
      * Creates a run metadata file with the specified entries and
      * adds it to the run database.
      */
-    void set_run_metadata(const char *base_name, const char *name, const char *description) {
-        last_db_entry.clear();
+    void set_run_metadata(const char *base_name, const char *name,
+                          const char *description) {
+        json.clear();
 
-        last_db_entry["type"] = "entry";
-        last_db_entry["file_base"] = base_name;
-        last_db_entry["name"] = name;
-        last_db_entry["description"] = description;
+        json["type"] = "entry";
+        json["file_base"] = base_name;
+        json["name"] = name;
+        json["description"] = description;
 
         char path[256];
         snprintf(path, 256, RUNS_DIR"/%s.met", base_name);
         File f = SD.open(path, "w");
-        serializeJson(last_db_entry, f);
+        serializeJson(json, f);
         f.close();
 
         append_db();
     }
 
-    /* Appends the DB with last_patch */
+    /* Appends the DB with whatever is in this class's "json" var*/
     void append_db() {
         File db = SD.open(RUNS_DB, "a");
 
-        serializeJson(last_db_entry, db);
+        serializeJson(json, db);
         db.println();
 
         db.close();
@@ -200,24 +198,24 @@ public:
         debug << "Last blocks written!" << endl;
         log_file.close();
 
-        status = {};
-        status.logging = false;
-//        status.num_overflows = 0;
-//        status.num_writes = 0;
-//        status.t_write_last = 0;
-//        status.t_write_avg = 0;
-//        status.data_rate_Bps = 0;
+        stats = {};
+        stats.logging = false;
+//        stats.num_overflows = 0;
+//        stats.num_writes = 0;
+//        stats.t_write_last = 0;
+//        stats.t_write_avg = 0;
+//        stats.data_rate_Bps = 0;
 
         return true;
     }
 
     bool is_logging() {
-        return status.logging;
+        return stats.logging;
     }
 
     bool init_log() {
         if (is_logging()) return false;
-        status.logging = true;
+        stats.logging = true;
         //Select next filename
         int file_idx = 0;
         do {

@@ -43,11 +43,8 @@ void setup() {
         web::setup_fail();
     }
 
-    debug << "Setting up server" << endl;
-    web::init();
-
     debug << "Starting server" << endl;
-    web::begin();
+    web::init();
 
     // Blink a success message :)
     debug << "Setup finished successfully!" << endl;

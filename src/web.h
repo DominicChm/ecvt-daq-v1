@@ -42,32 +42,33 @@ namespace ws_api {
         json(client);
     }
 
-    void emit_runs_patch(JsonDocument d, opt_client) {
+    void emit_runs_patch(JsonDocument &d, opt_client) {
         doc["type"] = "run_patch";
-        doc["data"] = d;
+        doc["data"] = d.as<JsonObject>();
+
         json(client);
     }
 
     void emit_stats(opt_client) {
         doc["type"] = "stats";
-        doc["data"]["t_write_last"] = sd_manager.status.t_write_last;
-        doc["data"]["t_write_avg"] = sd_manager.status.t_write_avg;
-        doc["data"]["data_rate_Bps"] = sd_manager.status.data_rate_Bps;
-        doc["data"]["num_overflows"] = sd_manager.status.num_overflows;
-        doc["data"]["num_writes"] = sd_manager.status.num_writes;
+        doc["data"]["t_write_last"] = sd_manager.stats.t_write_last;
+        doc["data"]["t_write_10_avg"] = sd_manager.stats.t_write_10_avg;
+        doc["data"]["data_rate_Bps"] = sd_manager.stats.data_rate_Bps;
+        doc["data"]["num_overflows"] = sd_manager.stats.num_overflows;
+        doc["data"]["num_writes"] = sd_manager.stats.num_writes;
         doc["data"]["num_serial_overflow"] = status.num_serial_overflows;
         doc["data"]["num_bytes_read"] = status.num_bytes_read;
         json(client);
     }
 
     void emit_status(opt_client) {
-        doc["type"] = "status";
-        doc["data"]["logging"] = sd_manager.status.logging;
+        doc["type"] = "stats";
+        doc["data"]["logging"] = sd_manager.stats.logging;
         json(client);
     };
 
     void emit_frame(const char *data, opt_client) {
-        doc["type"] = "status";
+        doc["type"] = "stats";
         doc["data"] = data;
         json(client);
     };
@@ -117,7 +118,7 @@ namespace ws_api {
                 emit_frame(print_buf);
         }
 
-        if(millis() - last_stat > 1000) {
+        if (millis() - last_stat > 1000) {
             last_stat = millis();
             emit_stats();
         }
@@ -190,12 +191,11 @@ namespace web {
         server.on("/api/start", HTTP_GET, http_api::start_log);
         server.on("/api/stop", HTTP_GET, http_api::stop_log);
 
-        server.serveStatic("/r.txt", SD, "/r.txt", "no-cache");
-        server.serveStatic("/", SD, "/index.html");
-        server.serveStatic("/*", SD, "/").setDefaultFile("/404.html");
-    }
-
-    void begin() {
+        //server.serveStatic("/r.txt", SD, "/r.txt", "no-cache");
+        //server.serveStatic("/", SD, "/index.html");
+        server.serveStatic("/run", SD, "/r/");
+        server.serveStatic("/r.jsonl", SD, "/r.jsonl");
+        server.serveStatic("/", SD, "/www/").setDefaultFile("/404.html");
         server.begin();
     }
 

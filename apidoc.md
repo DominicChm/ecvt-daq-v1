@@ -17,7 +17,7 @@ simple to allow for future expansion.
 | Type | Data | Description |
 |---|---|---|
 | event | runs_update | Indicates that something has changed about stored runs, and they should be updated. |
-| status | ... a lot (TODO)| |
+| stats | ... a lot (TODO)| |
 | stats | ... | Stats about the internal performance of the DAQ. Emits every so often. |
 
 ## HTTP Doc

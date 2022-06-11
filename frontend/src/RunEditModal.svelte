@@ -24,7 +24,9 @@
             </FormGroup>
 
             <FormGroup floating label="Description">
-                <Input placeholder="Enter a value" bind:value={run.description} name="desc"/>
+                <Input placeholder="Enter a value"
+                       type="textarea" bind:value={run.description}
+                       name="desc"/>
             </FormGroup>
             <input type="hidden" value={run.filename} name="file"/>
         </Form>
@@ -34,7 +36,8 @@
 
     <ModalFooter>
         <Button color="secondary" on:click={toggle}>Cancel</Button>
-        <Button color="primary" on:click={toggle} type="submit" form="edit-form">Submit</Button>
+        <Button color="primary" on:click={toggle} type="submit"
+                form="edit-form">Apply</Button>
     </ModalFooter>
 </Modal>
 

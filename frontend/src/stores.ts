@@ -3,6 +3,13 @@ import {noop, subscribe} from "svelte/internal";
 
 import.meta.hot;
 
+interface FileEntry {
+    type: "entry" | "deletion";
+    file_base: string;
+    name: string;
+    description: string;
+}
+
 //@ts-ignore
 console.log(__SNOWPACK_ENV__.MODE);
 
@@ -102,21 +109,25 @@ export const runs = derived([connected, message], (async ([$connected, $message]
     if (!$message || $message.type !== "event" || $message.data !== "runs") return;
     console.log("RUNS")
 
-    let res = await fetch(`r.txt`, {});
+    let res = await fetch(`r.jsonl`, {});
     const run_arr = (await res.text()).split("\n")
-        .map(v => v.trim())
         .filter(v => v)
-        .map(v => {
-            let a = v.split('`');
-            return {
-                filename: a[0],
-                name: a[1],
-                description: a[2],
+        .map(v => JSON.parse(v))
+        .reduce((acc: Map<string, FileEntry>, v: FileEntry) => {
+            switch (v.type) {
+                case "entry":
+                    acc.set(v.file_base, v);
+                    break;
+                case "deletion":
+                    acc.delete(v.file_base);
+                    break;
             }
-        });
+            return acc;
+        }, new Map());
 
-    console.log(run_arr);
-    set(run_arr);
+    const sorted = Array.from(run_arr.values())
+        .sort((a: any, b: any) => b.file_base - a.file_base);
+    set(sorted);
 }) as any);
 // Make sure frames are always listening for data.
 subscribe(frame, noop);

@@ -26,7 +26,7 @@ export default {
             },
         },
         {
-            src: '/r.txt',
+            src: '/r.jsonl',
             dest: (req, res) => {
                 return proxy.web(req, res, {
                     hostname: 'localhost',
